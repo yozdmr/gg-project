@@ -37,25 +37,22 @@ Make sure you have the following installed on your machine:
 
 1. Clone the project repository or download the project files.
 2. Open a terminal in the project directory.
-3. Run the following command to execute the setup script:
+3. Run the following command to create a conda environment called `gg337` with `Python 3.10`. It will also install all required packages from `environment.yml`:
 
    ```bash
    conda env create -f environment.yml
    ```
-4. This script performs the following tasks:
-    - Creates a new Conda environment called `gg337` with `Python 3.10`.
-    - Installs all required packages from `environment.yml`.
-5. Once the process completes, activate the environment using:
+4. Once the process completes, activate the environment using:
 
    ```bash
    conda activate gg337
    ```
-6. After activation, download the SpaCy language model `en_core_web_sm`:
+5. After activation, download the SpaCy language model `en_core_web_sm`:
 
     ```bash
     python -m spacy download en_core_web_sm
     ```
-7. You are ready to start using the environment for your text processing tasks.
+6. You are ready to start using the environment for your text processing tasks.
 
 ### Additional Information
 
