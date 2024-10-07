@@ -23,7 +23,7 @@ This project uses a variety of natural language processing (NLP) and text-proces
 
 ## Setup Instructions
 
-The setup process automates the creation of a Conda environment, installs the required libraries from a `requirements.txt` file, and downloads the SpaCy language model.
+The setup process automates the creation of a Conda environment, installs the required libraries from a `environment.yml` file. Create the environment, activate it, then download the SpaCy language model.
 
 ### Prerequisites
 
@@ -37,22 +37,25 @@ Make sure you have the following installed on your machine:
 
 1. Clone the project repository or download the project files.
 2. Open a terminal in the project directory.
-
 3. Run the following command to execute the setup script:
 
    ```bash
-   python setup.py
+   conda env create -f environment.yml
    ```
 4. This script performs the following tasks:
     - Creates a new Conda environment called `gg337` with `Python 3.10`.
-    - Installs all required packages from `requirements.txt`.
-    - Downloads the SpaCy language model `en_core_web_sm`.
-5. Once the script completes, activate the environment using:
+    - Installs all required packages from `environment.yml`.
+5. Once the process completes, activate the environment using:
 
    ```bash
    conda activate gg337
    ```
-6. After activation, you are ready to start using the environment for your text processing tasks.
+6. After activation, download the SpaCy language model `en_core_web_sm`:
+
+    ```bash
+    python -m spacy download en_core_web_sm
+    ```
+7. You are ready to start using the environment for your text processing tasks.
 
 ### Additional Information
 

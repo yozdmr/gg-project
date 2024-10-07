@@ -1,8 +1,0 @@
-spacy
-nltk
-jupyterlab
-ftfy
-unidecode
-langdetect
-inflection
-black
