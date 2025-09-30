@@ -17,7 +17,7 @@ This project uses a variety of natural language processing (NLP) and text-proces
 
 5. **Unidecode**: Converts Unicode text (e.g., accented characters) into ASCII text, useful for simplifying text handling.
 
-6. ***langdetect**: A simple and lightweight language detection library for Python, based on Google's language-detection library, that identifies the language of a given text input.
+6. **langdetect**: A simple and lightweight language detection library for Python, based on Google's language-detection library, that identifies the language of a given text input.
 
 7. **Inflection**: Provides methods to singularize or pluralize English nouns, and other useful inflection tasks for English grammar.
 
