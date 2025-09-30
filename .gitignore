@@ -1,6 +1,9 @@
 # directories
 data/
 
+# award names
+award_names.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
