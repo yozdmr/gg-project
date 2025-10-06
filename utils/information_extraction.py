@@ -10,8 +10,17 @@ from utils.helpers.text_matching import merge_similar_entries, extract_person_na
 # Load tweets
 def load_data(filepath):
     try:
+        data = []
         with open(filepath, 'r', encoding='utf-8') as file:
-            data = json.load(file)
+            # Try JSONL format first (preprocessed data)
+            if filepath.endswith('.jsonl'):
+                for line in file:
+                    if line.strip():
+                        data.append(json.loads(line))
+            else:
+                # Original JSON format
+                file.seek(0)
+                data = json.load(file)
         return data
     except FileNotFoundError:
         print(f"Error: File {filepath} not found")
@@ -33,20 +42,27 @@ def identify_matches(data, patterns, extract_function, n=5, \
 
     matches = defaultdict(int)    
     for tweet in data:
-        tweet_text = tweet.get('text', '')
-
-        if additional_context:
-            tweet_text += " " + additional_context
-
+        # use best text field based on preprocessing
+        if 'clean_text' in tweet:
+            tweet_text = tweet.get('clean_text', '')
+        elif 'text_no_tags' in tweet:
+            tweet_text = tweet.get('text_no_tags', '')
+        else:
+            tweet_text = tweet.get('text', '')  # fallback for original format
+        
+        # NOTE: skip retweets for more accurate results (we can debate this)
+        if tweet.get('is_retweet', False):
+            continue
+        
         # check if tweet contains pattern context
         has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) 
                                 for pattern in patterns)
         
         if has_pattern_context:
             # extract names using spaCy
-            person_names = extract_function(tweet_text)
-            for name in person_names:
-                matches[name] += 1
+            extracted_items = extract_function(tweet_text)
+            for item in extracted_items:
+                matches[item] += 1
     
     # merge similar entries
     merged_matches = merge_similar_entries(matches)
@@ -56,7 +72,6 @@ def identify_matches(data, patterns, extract_function, n=5, \
     return dict(top_n_matches)
 
 
-# Sample process tweets
 def process_tweets(data):
     N = 10
 
