@@ -106,6 +106,9 @@ def extract_awards(text):
     return awards
 
 
+
+# TODO Fix this function when working with the tuple case
+#   currently it doesn't work as expected, the logic is incorrect
 # merge similar names including partial matches and misspellings
 def merge_similar_entries(counts):
 
