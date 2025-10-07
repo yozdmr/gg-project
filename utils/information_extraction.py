@@ -9,25 +9,14 @@ from utils.helpers.text_matching import merge_similar_entries, extract_person_na
 
 # Load tweets
 def load_data(filepath):
-    try:
-        data = []
-        with open(filepath, 'r', encoding='utf-8') as file:
-            # Try JSONL format first (preprocessed data)
-            if filepath.endswith('.jsonl'):
-                for line in file:
-                    if line.strip():
-                        data.append(json.loads(line))
-            else:
-                # Original JSON format
-                file.seek(0)
-                data = json.load(file)
-        return data
-    except FileNotFoundError:
-        print(f"Error: File {filepath} not found")
-        return None
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON in {filepath}: {e}")
-        return None
+    tweets = []
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                tweets.append(json.loads(line.strip()))
+            except json.JSONDecodeError:
+                continue
+    return tweets
 
 
 ### DATA PROCESSING FUNCTIONS ###
@@ -35,41 +24,16 @@ def load_data(filepath):
 def identify_matches(data, patterns, extract_function, n=5, \
         additional_context=None, additional_context_function=None):
 
-    # both should be specified at the same time
-    if (additional_context and not additional_context_function) or \
-            (not additional_context and additional_context_function):
-        raise ValueError("Must provide both additional_context and additional_context_function")
-
-    matches = defaultdict(int)    
+    matches = defaultdict(int)
     for tweet in data:
-        # use best text field based on preprocessing
-        if 'clean_text' in tweet:
-            tweet_text = tweet.get('clean_text', '')
-        elif 'text_no_tags' in tweet:
-            tweet_text = tweet.get('text_no_tags', '')
-        else:
-            tweet_text = tweet.get('text', '')  # fallback for original format
-        
-        # NOTE: skip retweets for more accurate results (we can debate this)
+        text = tweet.get('clean_text') or tweet.get('text_no_tags') or tweet.get('text', '')
         if tweet.get('is_retweet', False):
             continue
-        
-        # check if tweet contains pattern context
-        has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) 
-                                for pattern in patterns)
-        
-        if has_pattern_context:
-            # extract names using spaCy
-            extracted_items = extract_function(tweet_text)
-            for item in extracted_items:
+        if any(re.search(p, text, re.IGNORECASE) for p in patterns):
+            for item in extract_function(text):
                 matches[item] += 1
-    
-    # merge similar entries
-    merged_matches = merge_similar_entries(matches)
-    
-    # return top n matches
-    top_n_matches = sorted(merged_matches.items(), key=lambda x: x[1], reverse=True)[:n]
-    return dict(top_n_matches)
+    merged = merge_similar_entries(matches)
+    return dict(sorted(merged.items(), key=lambda x: x[1], reverse=True)[:n])
 
 
 def process_tweets(data):
@@ -77,6 +41,8 @@ def process_tweets(data):
 
     print("getting awards...")
     awards = identify_matches(data, award_patterns, extract_awards, n=21)
+    award_categories = list(awards.keys())
+    award_info = {award: {"Nominees": [], "Winner": None, "Presenters": []} for award in award_names}
 
     # Next steps:
     #   pass awards as context to winners and hosts
@@ -90,7 +56,43 @@ def process_tweets(data):
     print("getting hosts...")
     hosts = identify_matches(data, host_patterns, extract_person_names, n=N)
 
-    return winners, hosts, awards
+    for award in award_categories:
+        print(f"Processing award: {award}")
+        # Filter tweets mentioning this award
+        award_tweets = [tweet for tweet in data if 'clean_text' in tweet and award.lower() in tweet['clean_text']]
+        if not award_tweets:
+            continue
+        winners_candidates = identify_matches(
+            award_tweets, winning_patterns, extract_person_names, n=N
+        )
+        if winners_candidates:
+            top_winner = max(winners_candidates, key=winners_candidates.get)
+            award_info[award]["Winner"] = top_winner
+        nominees_candidates = identify_matches(
+            award_tweets, [], extract_person_names, n=N
+        )
+        if nominees_candidates:
+            award_info[award]["Nominees"] = list(nominees_candidates.keys())
+        presenters_candidates = identify_matches(
+            award_tweets, [r"present", r"presents"], extract_person_names, n=N
+        )
+        if presenters_candidates:
+            award_info[award]["Presenters"] = list(presenters_candidates.keys())
+
+    # Extract hosts
+    award_texts = set()
+    for tweet in data:
+        if 'clean_text' in tweet:
+            award_texts.update([award.lower() for award in award_categories if award.lower() in tweet['clean_text']])
+
+    host_tweets = [
+        tweet for tweet in data
+        if 'clean_text' in tweet and all(award.lower() not in tweet['clean_text'] for award in award_categories)
+    ]
+    print("Getting hosts...")
+    hosts = identify_matches(host_tweets, host_patterns, extract_person_names, n=N)
+
+    return winners, hosts, award_info
         
 
 
