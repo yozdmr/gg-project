@@ -4,7 +4,8 @@ import time
 import json
 from collections import defaultdict
 from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
-from utils.helpers.text_matching import merge_similar_entries, extract_person_names, extract_awards
+from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, \
+    extract_person_names, extract_awards
 from utils.helpers.context_functions import award_winner_context, host_context
 
 
@@ -67,7 +68,10 @@ def identify_matches(data, patterns, extract_function, n=None, \
                 matches[item] += 1
     
     # merge similar entries
-    merged_matches = merge_similar_entries(matches)
+    if all(isinstance(key, tuple) for key in matches):
+        merged_matches = merge_similar_actors_awards(matches)
+    else:
+        merged_matches = merge_similar_entries(matches)
     
     # return top n matches
     if n is not None:
@@ -114,14 +118,25 @@ if __name__ == "__main__":
     end_time = time.time()
     print(f"Process took {end_time-start_time:.2f} seconds")
 
+
+    new_winners = {}
+    for (award, winner), count in winners.items():
+        if award not in new_winners:
+            new_winners[award] = []
+        new_winners[award].append((winner, count))
+
+
+
     # Print matches
     print("\n" + "="*50)
     print("WINNERS:")
     print("="*50)
-    for match, count in winners.items():
-        if count < n:
-            continue
-        print(f"{match}: {count}")
+    for award, winners in new_winners.items():
+        print(award)
+        for winner, count in winners:
+            if count < n:
+                continue
+            print(f"\t{winner}: {count}")
     print("\n" + "="*50)
     print("HOSTS:")
     print("="*50)

@@ -5,6 +5,11 @@ winning_patterns = [
     r'\bawarded\s+to\b'
 ]
 
+nominated_patterns = [
+    r'\bnominated\s+(?:for|to)\b',
+    r'\b(nominate|nominee)\b'
+]
+
 # patterns for identifying hosts of awards
 host_patterns = [
     r'\bhost\b',
