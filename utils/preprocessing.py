@@ -3,6 +3,9 @@ import re
 import argparse
 from datetime import datetime
 
+
+USE_LANGDETECT = True # a switch to disable language detection entirely when not using
+
 try:
     from ftfy import fix_text
 except Exception:
@@ -26,6 +29,19 @@ URL_RE = re.compile(r'https?://\S+')
 MENTION_RE = re.compile(r'@(\w+)')
 HASHTAG_RE = re.compile(r'#(\w+)')
 
+# common English hints for a quick heuristic
+EN_HINTS_RE = re.compile(
+    r'\b(the|and|is|are|was|were|you|i|he|she|we|they|this|that|of|to|in|for|on|with|best|win|wins|golden|globe|globes)\b',
+    re.IGNORECASE
+)
+
+# check to avoid fixing on already-ASCII text
+def _is_mostly_ascii(s: str, threshold: float = 0.98) -> bool:
+    if not s:
+        return True
+    ascii_count = sum(1 for ch in s if ord(ch) < 128)
+    return (ascii_count / len(s)) >= threshold
+
 def basic_clean(text: str) -> str:
     """
     Basic cleaning pipeline:
@@ -33,10 +49,13 @@ def basic_clean(text: str) -> str:
     """
     if not text:
         return ""
-    t = fix_text(text)              # fix HTML entity/garbled bytes
-    t = to_ascii(t)                 # transfer to ASCII
-    t = URL_RE.sub(" ", t)          # remove URL
-    t = " ".join(t.split())         # collapse whitespace
+    # run ftfy/unidecode only if needed (non-ASCII or contains HTML entities)
+    t = text
+    if not _is_mostly_ascii(t) or "&" in t:
+        t = fix_text(t)              # fix HTML entity/garbled bytes
+        t = to_ascii(t)              # transfer to ASCII
+    t = URL_RE.sub(" ", t)           # remove URL
+    t = " ".join(t.split())          # collapse whitespace
     return t
 
 def strip_tags(text: str) -> str:
@@ -63,10 +82,28 @@ def detect_language(text_no_tags: str, min_conf: float = 0.8):
     - If top probability >= min_conf (0.8 here), choose to keep, otherwise discard.
     - If langdetect is not available or text is empty, return ('unk', 0.0).
     """
-    if (detect_langs is None) or (not text_no_tags.strip()):
+    #allow turning detection off completely 
+    if not USE_LANGDETECT:
+        return ("unk", 0.0)
+
+    t = text_no_tags
+    if not t.strip():
+        return ("unk", 0.0)
+
+    # heuristic gate before calling langdetect
+    # 1) Mostly-ASCII + has common English words -> treat as English
+    if _is_mostly_ascii(t) and EN_HINTS_RE.search(t):
+        return ("en", 0.95)
+    # 2) Very non-ASCII -> likely not English; skip the slow detector
+    ascii_ratio = sum(1 for ch in t if ord(ch) < 128) / max(len(t), 1)
+    if ascii_ratio <= 0.50:
+        return ("unk", 0.50)
+
+    # Fallback to the original detector only for ambiguous ones
+    if (detect_langs is None):
         return ("unk", 0.0)
     try:
-        cand = detect_langs(text_no_tags)  # e.g.[en:0.99, ...]
+        cand = detect_langs(t)  # e.g.[en:0.99, ...]
         if not cand:
             return ("unk", 0.0)
         top = cand[0]
@@ -176,4 +213,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
