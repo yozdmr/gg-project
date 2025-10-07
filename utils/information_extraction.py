@@ -85,13 +85,11 @@ def process_tweets(data):
     print("getting awards...")
     awards = identify_matches(data, award_patterns, extract_awards)
 
-    # Next steps:
-    #   pass awards as context to winners and hosts
-    #     this will involve figuring hout how many awards to pass (how reliable are the award names?)
-    #   for winners, filter tweets by award name, and find winners from filtered list
-    #       then match list of winner candidates to award name
-    #   for hosts, exclude all tweets that mention a specific award (this means person is presenter)
-    #       then find hosts from remaining tweets
+    # TODO Next steps
+    #   Getting name of award (e.g. "Golden Globes")
+    #   Resolving trigger-happy merging of award names for winners
+    #   Identifying nominees vs winners
+    #   Identifying presenters vs hosts
     print("getting winners...")
     winners = identify_matches(data, winning_patterns, extract_person_names, \
         additional_context=awards, additional_context_function=award_winner_context)

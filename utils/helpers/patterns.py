@@ -5,6 +5,7 @@ winning_patterns = [
     r'\bawarded\s+to\b'
 ]
 
+# patterns for identifying nominees to awards
 nominated_patterns = [
     r'\bnominated\s+(?:for|to)\b',
     r'\b(nominate|nominee)\b'
