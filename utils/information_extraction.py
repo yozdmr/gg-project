@@ -86,6 +86,7 @@ def process_tweets(data):
     awards = identify_matches(data, award_patterns, extract_awards)
 
     # TODO Next steps
+    #   Getting name of award (e.g. "Golden Globes")
     #   Resolving trigger-happy merging of award names for winners
     #   Identifying nominees vs winners
     #   Identifying presenters vs hosts
