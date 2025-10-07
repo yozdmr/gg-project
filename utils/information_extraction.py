@@ -5,6 +5,7 @@ import json
 from collections import defaultdict
 from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
 from utils.helpers.text_matching import merge_similar_entries, extract_person_names, extract_awards
+from utils.helpers.context_functions import award_winner_context, host_context
 
 
 # Load tweets
@@ -32,7 +33,7 @@ def load_data(filepath):
 
 ### DATA PROCESSING FUNCTIONS ###
 
-def identify_matches(data, patterns, extract_function, n=5, \
+def identify_matches(data, patterns, extract_function, n=None, \
         additional_context=None, additional_context_function=None):
 
     # both should be specified at the same time
@@ -57,10 +58,11 @@ def identify_matches(data, patterns, extract_function, n=5, \
         # check if tweet contains pattern context
         has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) 
                                 for pattern in patterns)
-        
         if has_pattern_context:
-            # extract names using spaCy
-            extracted_items = extract_function(tweet_text)
+            extracted_items = additional_context_function(tweet_text, additional_context, extract_function) \
+                if additional_context is not None \
+                else extract_function(tweet_text)
+            
             for item in extracted_items:
                 matches[item] += 1
     
@@ -68,15 +70,16 @@ def identify_matches(data, patterns, extract_function, n=5, \
     merged_matches = merge_similar_entries(matches)
     
     # return top n matches
-    top_n_matches = sorted(merged_matches.items(), key=lambda x: x[1], reverse=True)[:n]
-    return dict(top_n_matches)
+    if n is not None:
+        top_n_matches = sorted(merged_matches.items(), key=lambda x: x[1], reverse=True)[:n]
+        return dict(top_n_matches)
+    else:
+        return dict(merged_matches)
 
 
 def process_tweets(data):
-    N = 10
-
     print("getting awards...")
-    awards = identify_matches(data, award_patterns, extract_awards, n=21)
+    awards = identify_matches(data, award_patterns, extract_awards)
 
     # Next steps:
     #   pass awards as context to winners and hosts
@@ -86,9 +89,11 @@ def process_tweets(data):
     #   for hosts, exclude all tweets that mention a specific award (this means person is presenter)
     #       then find hosts from remaining tweets
     print("getting winners...")
-    winners = identify_matches(data, winning_patterns, extract_person_names, n=N)
+    winners = identify_matches(data, winning_patterns, extract_person_names, \
+        additional_context=awards, additional_context_function=award_winner_context)
     print("getting hosts...")
-    hosts = identify_matches(data, host_patterns, extract_person_names, n=N)
+    hosts = identify_matches(data, host_patterns, extract_person_names, \
+        additional_context=awards, additional_context_function=host_context)
 
     return winners, hosts, awards
         
@@ -96,6 +101,7 @@ def process_tweets(data):
 
 if __name__ == "__main__":
     data_file = 'gg2013.json'
+    n = 10
 
     # Load the main data file
     gg_data = load_data(data_file)
@@ -113,15 +119,21 @@ if __name__ == "__main__":
     print("WINNERS:")
     print("="*50)
     for match, count in winners.items():
+        if count < n:
+            continue
         print(f"{match}: {count}")
     print("\n" + "="*50)
     print("HOSTS:")
     print("="*50)
     for match, count in hosts.items():
+        if count < n:
+            continue
         print(f"{match}: {count}")
     print("\n" + "="*50)
     print("AWARDS:")
     print("="*50)
     for match, count in awards.items():
+        if count < n:
+            continue
         print(f"{match}: {count}")
     

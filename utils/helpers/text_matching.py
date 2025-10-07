@@ -112,6 +112,16 @@ def merge_similar_entries(counts):
     def similarity_ratio(a, b):
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
+    def get_name_for_comparison(key):
+        if isinstance(key, tuple):
+            return key[1]  # for (award, winner) tuples, compare winner name
+        return key
+
+    def get_award_for_comparison(key):
+        if isinstance(key, tuple):
+            return key[0]  # for (award, winner) tuples, compare award name
+        return key
+
     merged_counts = defaultdict(int)
     processed = set()
     
@@ -124,30 +134,45 @@ def merge_similar_entries(counts):
             
         # canonical name is most frequent version of name
         canonical_name = name
+        canonical_award = get_award_for_comparison(canonical_name)
         total_count = count
         processed.add(name)
+        
+        # get the name part for comparison
+        name_for_comparison = get_name_for_comparison(name)
+        canonical_name_for_comparison = get_name_for_comparison(canonical_name)
         
         # look for similar names to merge
         for other_name, other_count in sorted_names:
             if other_name in processed:
                 continue
-                
+            
+            # for tuples, also check if they have the same award
+            other_award_for_comparison = get_award_for_comparison(other_name)
+            if isinstance(name, tuple) and canonical_award != other_award_for_comparison:
+                continue
+            
+            other_name_for_comparison = get_name_for_comparison(other_name)
             should_merge = False
             
             # case 1: one name is contained in another ("Amy" in "Amy Poehler")
-            if (name.lower() in other_name.lower().split() or 
-                    other_name.lower() in name.lower().split()):
+            if (name_for_comparison.lower() in other_name_for_comparison.lower().split() or 
+                    other_name_for_comparison.lower() in name_for_comparison.lower().split()):
                 should_merge = True
                 # use longer name as canonical
-                if len(other_name) > len(canonical_name):
+                if len(other_name_for_comparison) > len(canonical_name_for_comparison):
                     canonical_name = other_name
+                    canonical_name_for_comparison = other_name_for_comparison
             
             # case 2: high similarity (misspellings, typos)
-            elif similarity_ratio(name, other_name) > 0.85:
+            elif similarity_ratio(name_for_comparison, other_name_for_comparison) > 0.85 and \
+                    similarity_ratio(canonical_award, other_award_for_comparison) > 0.7:
                 should_merge = True
                 # keep more common name as canonical
                 if other_count > count:
                     canonical_name = other_name
+                    canonical_name_for_comparison = other_name_for_comparison
+                    canonical_award = other_award_for_comparison
             
             if should_merge:
                 total_count += other_count

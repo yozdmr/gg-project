@@ -17,7 +17,6 @@ award_patterns = [
     r'\bBest\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*',
     r'\bOutstanding\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', 
     r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+Award',
-    r'\bGolden\s+Globe\s+for\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*',
     r'\bnominated\s+for\b',
     r'\bcategory\b',
     r'\baward\s+for\b'
