@@ -40,15 +40,17 @@ def find_matches(data, patterns, extract_function, context=None, context_functio
         # choose cleanest text
         tweet_text = tweet.get('clean_text') or tweet.get('text_no_tags') or tweet.get('text', '')
 
-        if tweet.get('is_retweet', False):
-            continue
+        # Add quote tweet context to main tweet
+        if tweet.get('is_quote', False):
+            tweet_text += " " + tweet.get('qt_text', '')
         # check if tweet contains any keyword pattern
         has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) for pattern in patterns)
         if not has_pattern_context:
             continue
 
         # apply context function if given
-        extracted = context_function(tweet_text, context, extract_function) if context else extract_function(tweet_text)
+        extracted = context_function(tweet_text, context, extract_function) \
+        if context else extract_function(tweet_text)
         for item in extracted:
             matches[item] += 1
 
@@ -60,12 +62,13 @@ def find_matches(data, patterns, extract_function, context=None, context_functio
 def extract_awards_from_tweets(data):
     return find_matches(data, award_patterns, extract_awards)
 
+# NOTE: Winners for Tian
 def extract_winners_from_tweets(data, awards):
-    return find_matches(data, winning_patterns, extract_person_names,
+    return find_matches(data, winning_patterns, extract_function=extract_person_names,
                         context=awards, context_function=award_winner_context)
 
 def extract_hosts_from_tweets(data, awards):
-    return find_matches(data, host_patterns, extract_person_names,
+    return find_matches(data, host_patterns, extract_function=extract_person_names,
                         context=awards, context_function=host_context)
 
 
@@ -112,13 +115,13 @@ def pretty_print_results(winners, hosts, awards, min_count=10):
 
 
 if __name__ == "__main__":
-    data_file = 'gg2013.json'
+    data_file = 'gg2013_preprocessed.jsonl'
     n = 10
 
     # Load the main data file
     gg_data = load_data(data_file)
     if gg_data:
-        print(f"Loaded {len(gg_data)} items from gg2013.json")
+        print(f"Loaded {len(gg_data)} items from {data_file}")
 
     # Measure time taken for process_tweets
     start_time = time.time()
