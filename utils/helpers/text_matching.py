@@ -8,19 +8,34 @@ from collections import defaultdict
 nlp = spacy.load("en_core_web_sm")
 
 
+def is_valid_person_name(name, context=""):
+        if not name: return False
+        parts = name.split()
+        # must have at least 2 parts unless it's a known single (Cher, Adele)
+        if len(parts) == 1 and len(parts[0]) < 4:
+            return True
+        if len(parts) == 1:
+            return False
+        
+        # check capitalization
+        for p in parts:
+            if not re.match(r"^[A-Z][a-z]+(?:[-'][A-Z][a-z]+)*$", p):
+                return False
+        
+        # reject if context contains award-y verbs
+        if context and any(word in context.lower() for word in ["wins", "award", "hosting", "globes"]):
+            return False
+        
+        return True
+
 # get the names of people
 #   use regex and spaCy to identify names
 def extract_person_names(text):
-
-    def is_valid_person_name(name):
-        pattern = r"^[A-Z][a-z]*(?:\s[A-Z][a-z]*)*$"
-        return bool(re.match(pattern, name))
-
     doc = nlp(text)
     person_names = []
     
     for ent in doc.ents:
-        if ent.label_ == "PERSON" and is_valid_person_name(ent.text):
+        if ent.label_ == "PERSON" and is_valid_person_name(ent.text, context=None):
             person_names.append(ent.text)
     
     return person_names
@@ -59,13 +74,11 @@ def extract_awards(text):
         award_keywords = ['best', 'outstanding', 'award', 'category']
         if not any(keyword in name.lower() for keyword in award_keywords):
             return False
-        
         # check for title case (Best Actor) or all caps pattern with>= 2 words
         title_case_pattern = r'^[A-Z][a-z]*(?:\s+[A-Z][a-z]*)+$'  # At least 2 title case words
         all_caps_pattern = r'^[A-Z]+(?:\s+[A-Z]+)+$'              # At least 2 all caps words
         if not (re.match(title_case_pattern, name) or re.match(all_caps_pattern, name)):
             return False
-            
         return True
     
     doc = nlp(text)
@@ -108,27 +121,13 @@ def extract_awards(text):
     
     return awards
 
-
-
-def _should_merge(name, other_name, similarity_thresh=0.85):
-    def similarity_ratio(a, b):
-        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-    
-    should_merge = False
-    case = 0
-    
-    # case 1: one name is contained in another ("Amy" in "Amy Poehler")
-    if (name.lower() in other_name.lower().split() or 
-            other_name.lower() in name.lower().split()):
-        should_merge = True
-        case = 1
-    
-    # case 2: high similarity (misspellings, typos)
-    elif similarity_ratio(name, other_name) > similarity_thresh:
-        should_merge = True
-        case = 2
-    
-    return should_merge, case
+def _should_merge(a: str, b: str, similarity_thresh: float = 0.85):
+    """Decide if two names should be merged based on substring or similarity."""
+    if a.lower() in b.lower().split() or b.lower() in a.lower().split():
+        return True, 1  # substring match
+    if SequenceMatcher(None, a.lower(), b.lower()).ratio() > similarity_thresh:
+        return True, 2  # high similarity
+    return False, 0
 
 
 # merge similar names including partial matches and misspellings
@@ -157,13 +156,9 @@ def merge_similar_entries(counts):
             should_merge, case = _should_merge(name, other_name)
             
             if should_merge:
-                if case == 1:
-                    # use longer name as canonical
-                    if len(other_name) > len(canonical_name):
+                if case == 1 and len(other_name) > len(canonical_name):
                         canonical_name = other_name
-                elif case == 2:
-                    # keep more common name as canonical
-                    if other_count > count:
+                elif case == 2 and other_count > count:
                         canonical_name = other_name
                 total_count += other_count
                 processed.add(other_name)
@@ -174,12 +169,10 @@ def merge_similar_entries(counts):
 
 
 def merge_similar_actors_awards(counts):
-    
     merged_counts = defaultdict(int)
     processed = set()
 
     sorted_names = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-    
     for pair, count in sorted_names:
         award, name = pair[0], pair[1]
 
@@ -197,24 +190,18 @@ def merge_similar_actors_awards(counts):
                 continue
 
             should_merge_name, case = _should_merge(name, other_name)
-            should_merge_award, _ = _should_merge(award, other_award, similarity_thresh=0.7)
+            should_merge_award, _ = _should_merge(award, other_award, similarity_thresh=0.8)
             
             if should_merge_name:
-                if case == 1:
-                    # use longer name as canonical
-                    if len(other_name) > len(canonical_name):
+                if case == 1 and len(other_name) > len(canonical_name):
                         canonical_name = other_name
-                elif case == 2:
-                    # keep more common name as canonical
-                    if other_count > count:
+                elif case == 2 and other_count > count:
                         canonical_name = other_name
                 total_count += other_count
                 processed.add(other_pair)
             
-            if should_merge_award or (award in other_award or other_award in award):
+            if should_merge_award or award in other_award or other_award in award:
                 canonical_award = other_award if len(other_award) > len(award) else award
-            else:
-                canonical_award = award
             
         merged_counts[(canonical_award, canonical_name)] = total_count
 

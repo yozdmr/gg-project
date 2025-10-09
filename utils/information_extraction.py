@@ -7,6 +7,7 @@ from utils.helpers.patterns import winning_patterns, host_patterns, award_patter
 from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, \
     extract_person_names, extract_awards
 from utils.helpers.context_functions import award_winner_context, host_context
+# import gender_guesser as gender
 
 
 # Load tweets
@@ -33,72 +34,81 @@ def load_data(filepath):
 
 
 ### DATA PROCESSING FUNCTIONS ###
-
-def identify_matches(data, patterns, extract_function, n=None, \
-        additional_context=None, additional_context_function=None):
-
-    # both should be specified at the same time
-    if (additional_context and not additional_context_function) or \
-            (not additional_context and additional_context_function):
-        raise ValueError("Must provide both additional_context and additional_context_function")
-
-    matches = defaultdict(int)    
+def find_matches(data, patterns, extract_function, context=None, context_function=None):
+    matches = defaultdict(int)
     for tweet in data:
-        # use best text field based on preprocessing
-        if 'clean_text' in tweet:
-            tweet_text = tweet.get('clean_text', '')
-        elif 'text_no_tags' in tweet:
-            tweet_text = tweet.get('text_no_tags', '')
-        else:
-            tweet_text = tweet.get('text', '')  # fallback for original format
-        
-        # NOTE: skip retweets for more accurate results (we can debate this)
+        # choose cleanest text
+        tweet_text = tweet.get('clean_text') or tweet.get('text_no_tags') or tweet.get('text', '')
+
         if tweet.get('is_retweet', False):
             continue
-        
-        # check if tweet contains pattern context
-        has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) 
-                                for pattern in patterns)
-        if has_pattern_context:
-            extracted_items = additional_context_function(tweet_text, additional_context, extract_function) \
-                if additional_context is not None \
-                else extract_function(tweet_text)
-            
-            for item in extracted_items:
-                matches[item] += 1
-    
-    # merge similar entries
-    if all(isinstance(key, tuple) for key in matches):
-        merged_matches = merge_similar_actors_awards(matches)
-    else:
-        merged_matches = merge_similar_entries(matches)
-    
-    # return top n matches
-    if n is not None:
-        top_n_matches = sorted(merged_matches.items(), key=lambda x: x[1], reverse=True)[:n]
-        return dict(top_n_matches)
-    else:
-        return dict(merged_matches)
+        # check if tweet contains any keyword pattern
+        has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) for pattern in patterns)
+        if not has_pattern_context:
+            continue
+
+        # apply context function if given
+        extracted = context_function(tweet_text, context, extract_function) if context else extract_function(tweet_text)
+        for item in extracted:
+            matches[item] += 1
+
+    # merge
+    if all(isinstance(k, tuple) for k in matches):
+        return merge_similar_actors_awards(matches)
+    return merge_similar_entries(matches)
+
+def extract_awards_from_tweets(data):
+    return find_matches(data, award_patterns, extract_awards)
+
+def extract_winners_from_tweets(data, awards):
+    return find_matches(data, winning_patterns, extract_person_names,
+                        context=awards, context_function=award_winner_context)
+
+def extract_hosts_from_tweets(data, awards):
+    return find_matches(data, host_patterns, extract_person_names,
+                        context=awards, context_function=host_context)
 
 
 def process_tweets(data):
-    print("getting awards...")
-    awards = identify_matches(data, award_patterns, extract_awards)
+    print("Extracting awards...")
+    awards = extract_awards_from_tweets(data)
 
-    # TODO Next steps
-    #   Getting name of award (e.g. "Golden Globes")
-    #   Resolving trigger-happy merging of award names for winners
-    #   Identifying nominees vs winners
-    #   Identifying presenters vs hosts
-    print("getting winners...")
-    winners = identify_matches(data, winning_patterns, extract_person_names, \
-        additional_context=awards, additional_context_function=award_winner_context)
-    print("getting hosts...")
-    hosts = identify_matches(data, host_patterns, extract_person_names, \
-        additional_context=awards, additional_context_function=host_context)
+    print("Extracting winners...")
+    winners = extract_winners_from_tweets(data, awards)
+
+    print("Extracting hosts...")
+    hosts = extract_hosts_from_tweets(data, awards)
 
     return winners, hosts, awards
         
+
+def pretty_print_results(winners, hosts, awards, min_count=10):
+    print("\n" + "="*50)
+    print("WINNERS:")
+    print("="*50)
+    grouped_winners = defaultdict(list)
+    for (award, winner), count in winners.items():
+        if count >= min_count:
+            grouped_winners[award].append((winner, count))
+    for award, winner_list in grouped_winners.items():
+        print(award)
+        for winner, count in sorted(winner_list, key=lambda x: -x[1]):
+            print(f"\t{winner}: {count}")
+
+    print("\n" + "="*50)
+    print("HOSTS:")
+    print("="*50)
+    for host, count in hosts.items():
+        if count >= min_count:
+            print(f"{host}: {count}")
+
+    print("\n" + "="*50)
+    print("AWARDS:")
+    print("="*50)
+    for award, count in awards.items():
+        if count >= min_count:
+            print(f"{award}: {count}")
+
 
 
 if __name__ == "__main__":
@@ -123,30 +133,6 @@ if __name__ == "__main__":
             new_winners[award] = []
         new_winners[award].append((winner, count))
 
-
-
     # Print matches
-    print("\n" + "="*50)
-    print("WINNERS:")
-    print("="*50)
-    for award, winners in new_winners.items():
-        print(award)
-        for winner, count in winners:
-            if count < n:
-                continue
-            print(f"\t{winner}: {count}")
-    print("\n" + "="*50)
-    print("HOSTS:")
-    print("="*50)
-    for match, count in hosts.items():
-        if count < n:
-            continue
-        print(f"{match}: {count}")
-    print("\n" + "="*50)
-    print("AWARDS:")
-    print("="*50)
-    for match, count in awards.items():
-        if count < n:
-            continue
-        print(f"{match}: {count}")
+    pretty_print_results(winners, hosts, awards, min_count=n)
     
