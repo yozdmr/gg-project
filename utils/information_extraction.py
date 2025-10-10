@@ -40,9 +40,9 @@ def find_matches(data, patterns, extract_function, context=None, context_functio
         # choose cleanest text
         tweet_text = tweet.get('clean_text') or tweet.get('text_no_tags') or tweet.get('text', '')
 
-        # Add quote tweet context to main tweet
-        if tweet.get('is_quote', False):
-            tweet_text += " " + tweet.get('qt_text', '')
+        # if tweet.get('is_quote', False):
+        #     tweet_text += " " + tweet.get('qt_text', '')
+        
         # check if tweet contains any keyword pattern
         has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) for pattern in patterns)
         if not has_pattern_context:
