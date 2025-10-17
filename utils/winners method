@@ -1,0 +1,18 @@
+# Winner identification gives:
+#   tweets: preprocessed records with fields like qt_text / rt_text / clean_text / text_no_tags / lang / lang_conf / timestamp_ms
+#   award_names: official award strings to predict 
+#   nominees_by_award: {award -> [nominees]}
+#
+# Approach:
+#   1) language/time gate.
+#   2) For each tweet, prefer factual-looking sentences (like "wins / goes to / is awarded to"). Use local windows around the verb to align award and candidate.
+#   3) Award alignment: "X wins Y" vs "Y goes to X":
+#      Match award names via token Jaccard + anchor tokens (e.g., drama/actor/television).
+#   4) Candidate extraction:
+#      work-type awards (Picture/Film/Series/Song/Score…): substring match against nominees
+#      type awards
+#   5) Vote per (award, candidate), de-duplicate per tweet, merge near duplicates.
+#
+# Notes:
+#    it is driven by award_names + nominees_by_award + thresholds.
+
