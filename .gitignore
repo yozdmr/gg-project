@@ -1,5 +1,6 @@
 ## Custom GitIgnore files
 gg2013_preprocessed.jsonl
+**/*/.DS_Store
 
 # directories
 data/

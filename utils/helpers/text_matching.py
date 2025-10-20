@@ -42,84 +42,79 @@ def extract_person_names(text):
 
 
 ''' get the names of awards
-multiple step process !!!
- 1. define is_valid_award_name function
-    - this function checks if a name is a valid award name
-      by looking for keywords and using regex to check for
-      title case or all caps patterns
- 2. use spaCy labels (WORK_OF_ART, ORG, EVENT) to extract awards
-    - these were the closest matching based on what I found
-      https://stackoverflow.com/questions/70835924/how-to-get-a-description-for-each-spacy-ner-entity#answer-75317040
- 3. use regex patterns to extract awards
-    - these patterns are based on common award naming types
-      trying to match them as closely as possible
- 4. contextual award mentions using regex
-    - same as 3 but using different patterns for different
-      sentence matching
-
-the three steps of extractions all add to the same list (not duplicates)
-   so three methdods of finding award names.
-   the final list is merged and returned
 '''
-def extract_awards(text):
-    
-    # step 1: define is_valid_award_name()
-    def is_valid_award_name(name):
-        name = name.strip()
-        
-        # needs to have  award-related keywords
-        # NOTE: "Please note that, when mining award names specifically, 
-        #        you cannot hardcode parts of these names in your solution with the 
-        #        only exception of the word "Best." "
-        award_keywords = ['best', 'outstanding', 'award', 'category']
-        if not any(keyword in name.lower() for keyword in award_keywords):
-            return False
-        # check for title case (Best Actor) or all caps pattern with>= 2 words
-        title_case_pattern = r'^[A-Z][a-z]*(?:\s+[A-Z][a-z]*)+$'  # At least 2 title case words
-        all_caps_pattern = r'^[A-Z]+(?:\s+[A-Z]+)+$'              # At least 2 all caps words
-        if not (re.match(title_case_pattern, name) or re.match(all_caps_pattern, name)):
-            return False
-        return True
-    
-    doc = nlp(text)
-    awards = []
-    
-    # step 2: use spaCy to extract from named entities (WORK_OF_ART, ORG, EVENT)
-    for ent in doc.ents:
-        if ent.label_ in ["WORK_OF_ART", "ORG", "EVENT"] and is_valid_award_name(ent.text):
-            awards.append(ent.text)
-    
-    # step 3: use patterns for extracting common award naming types
-    award_patterns = [
-        r'\bBest\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*',         # ex: Best 'Actor', Best 'Motion Picture'
-        r'\bOutstanding\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*',  # ex: Outstanding 'Performance'
-        r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+Award',        # ex: 'Supporting Actor' Award
-    ]
-    
-    for pattern in award_patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            if is_valid_award_name(match):
-                if match not in awards:  # make sure to not get duplicates
-                    awards.append(match)
-    
-    # step 4: contextual award mentions using regex
-    context_patterns = [
-        r'nominated\s+for\s+([A-Z][^.!?]*)',       # ex: "nominated for Best Actor"
-        r'category\s+(?:is\s+)?([A-Z][^.!?]*)',    # ex: "category is Best Picture"
-        r'goes\s+to\s+\w+\s+for\s+([A-Z][^.!?]*)'  # ex: "goes to John for Best Actor"
-    ]
+def extract_awards(tweets:list):
+    # If right side of dash looks like person
+    #    remove it
+    def truncate_after_award(candidate: str):
+        if "-" not in candidate:
+            return candidate.strip()
 
-    for pattern in context_patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            # Clean up the match and validate
-            clean_match = re.sub(r'[.!?].*$', '', match).strip()
-            if is_valid_award_name(clean_match):
-                if clean_match not in awards:  # make sure to not get duplicates
-                    awards.append(clean_match)
+        left, right = candidate.split("-", 1)
+        doc_right = nlp(right.strip())
+
+        # Heuristic: if the right side starts with a PERSON/ORG/PROPN/DET+NOUN combo → winner section
+        first_token = doc_right[0]
+        if (first_token.ent_type_ in {"PERSON", "ORG"} or
+            first_token.pos_ in {"PROPN"} or
+            any(ent.label_ in {"PERSON", "ORG"} for ent in doc_right.ents)):
+            return left.strip()        # discard winner part
+        return candidate.strip()
     
-    return awards
+
+    award_fingerprints = {
+        "dash_idx": [2,3,8,9],
+        "comma_idx": [10,11],
+        "dot_idx": [1]
+    }
+    
+    award_candidates = defaultdict(int)
+    
+    for tweet in tweets:
+        candidate = truncate_after_award(tweet.strip()).lower()
+        
+        split_candidate = candidate.split()
+
+        if len(split_candidate) - split_candidate.count('-') < 4 \
+                or len(split_candidate) - split_candidate.count('-') > 15\
+                or 'and' in split_candidate:
+            continue
+                        
+        if '-' in split_candidate:
+            if split_candidate.count('-') > 2:
+                continue
+
+            if len( candidate.split('-')[-1].split() ) > 3:
+                continue
+            
+            dash_idx = split_candidate.index('-')
+            if dash_idx in award_fingerprints['dash_idx']:
+                award_candidates[candidate] += 1
+                continue
+        
+        if ',' in split_candidate:
+            if split_candidate.count(',') != 1:
+                continue
+
+            comma_idx = split_candidate.index(',')
+            if comma_idx in award_fingerprints['comma_idx']:
+                award_candidates[candidate] += 1
+                continue
+        
+        if '.' in split_candidate:
+            if split_candidate.count('.') != 1:
+                continue
+            
+            dot_idx = split_candidate.index('.')
+            if dot_idx in award_fingerprints['dot_idx']:
+                award_candidates[candidate] += 1
+                continue
+    
+    return award_candidates
+
+
+
+
 
 def _should_merge(a: str, b: str, similarity_thresh: float = 0.85):
     """Decide if two names should be merged based on substring or similarity."""
