@@ -3,7 +3,7 @@ import re
 import time
 import json
 import difflib
-from collections import defaultdict
+from collections import defaultdict, Counter
 from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
 from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, \
     extract_person_names, extract_awards
@@ -90,47 +90,148 @@ def find_matches(data, patterns, extract_function, context=None, context_functio
     return merge_similar_entries(matches)
 
 def extract_awards_from_tweets(data):
-    import spacy
-    nlp = spacy.load("en_core_web_sm")
+
+    hashtags = Counter()
+    for tweet in data:
+        for hashtag in tweet['hashtags']:
+            hashtags[hashtag] += 1
+    most_common_hashtag = hashtags.most_common(1)[0][0]
+    most_common_hashtag = re.split(r'(?<!\^)(?=[A-Z])', most_common_hashtag)[1:]
+    print(f"Most common hashtag: {most_common_hashtag}")
+
+    hashtags = Counter()
+    for tweet in data:
+        hashtags[tweet['rt_user']] += 1
+        hashtags[tweet['qt_user']] += 1
+    most_common_referenced = [tag for tag in hashtags.most_common(11) if tag[0] is not None][:10]  # Get top 10, drop None if present
+    print(f"Most common referenced accounts: {[tag[0] for tag in most_common_referenced]}")
 
     filtered_tweets = []
     for tweet in data:
-        doc = nlp(tweet['clean_text'])
 
         # run your existing regex extraction
         for pattern, side in award_patterns.items():
+            
+            # Match to regex pattern
             match = re.search(pattern, tweet['clean_text'])
             if not match:
                 continue
 
+            # get the left and right side of the match
             left, _, right = tweet['clean_text'].partition(match.group(0))
-            award_text = left if side == 0 else right
+            award_text = left if side == 0 else right  # Identify which side the award will be on
             award_text = re.split(r'[.?!"]', award_text)[0]
-            if ":" in award_text:
+            if ":" in award_text:  # Eliminate retweet text (e.g. get rid of "@CNNshowbiz:")
                 award_text = award_text.split(":", 1)[-1]
-
-            if len(award_text.split()) <= 1:
-                continue
         
-            cleaned = award_text.split("for")[0]
-            cleaned = cleaned.rsplit(",", 1)[0].strip()
-            cleaned = cleaned.split("and")[0]
+            cleaned = award_text.split("for")[0]  # Get everything before keyword "for"
+            cleaned = cleaned.rsplit(",", 1)[0].strip()  # Get everything before last comma
+            cleaned = cleaned.split("and")[0]  # Get everything before "and"
+
+            cleaned = cleaned.split("at the #")[0]  # Get everything before "#"
+            cleaned = cleaned.split("#")[0]
+
+            # Get rid of common matches that contain "my" and "gang" that are not awards
             if any(x in award_text.lower() for x in ["my", "gang"]):
                 continue
 
+            if len(cleaned.split()) <= 1:  # Get rid of trimmed awards that are too short
+                continue
+
+            # START Get rid of awards that contain the most common hashtag (should be Golden Globes)
+            hashtag_in_string = True
+            for word in most_common_hashtag:
+                if word.lower() not in cleaned.lower():
+                    hashtag_in_string = False
+            
+            if hashtag_in_string:
+                continue
+            # END
+
+            
+            # Skip awards that contain numbers
+            if any(char.isdigit() for char in award_text):
+                continue
+            
+
+            # Add to list of tweets
             filtered_tweets.append((tweet, cleaned, pattern))
 
-    print(f"Found {len(filtered_tweets)} results in the first pass")
+    print(f"Found {len(filtered_tweets)} results")
 
     
-    # Weighting notes:
+    # Weighting filtered tweets:
     #   Higher if:
     #       - Starts with best
     #       - more than 50% of words are title case
     #       - 4 or more words
+    #       - Referenced by most common referenced accounts
+    #   Lower if:
+    #       - starts with lowercase "the", "[Ss]o", "[Bb]ut", "[Aa]\s", "[Aa]nd"
+    #       - contains # or @ or "i think" or "\simo\s", "\sbig\s"
+
+    # Aggregate award candidates with weighted scoring
+    award_candidates = defaultdict(float)
+    
+    for tweet, cleaned_award, pattern in filtered_tweets:
+        weight = calculate_tweet_weight(tweet, cleaned_award, most_common_referenced)
+        award_candidates[cleaned_award] += weight
+
+
+    # Merge similar awards
+    
+
 
     
-    return filtered_tweets
+    # Convert to list of tuples and sort by weight
+    weighted_awards = [(award, weight) for award, weight in award_candidates.items()]
+    weighted_awards.sort(key=lambda x: x[1], reverse=True)
+    
+    return weighted_awards
+
+def calculate_tweet_weight(tweet, award_text, most_common_referenced):
+    weight = 1.0
+    
+    # Positive weights
+    if award_text.lower().startswith('best'):
+        weight += 0.8
+    
+    # Check if more than 50% of words are title case
+    words = award_text.split()
+    if words:
+        title_case_words = sum(1 for word in words if word.istitle())
+        if title_case_words / len(words) > 0.5:
+            weight += 0.3
+    
+    # 4 or more words
+    if len(words) >= 4:
+        weight += 0.2
+    
+    # Referenced by most common referenced accounts
+    rt_user = tweet.get('rt_user')
+    qt_user = tweet.get('qt_user')
+    referenced_accounts = [account[0] for account in most_common_referenced]
+    if rt_user in referenced_accounts or qt_user in referenced_accounts:
+        weight += 0.3
+    
+    # Negative weights
+    # Check for problematic starts
+    problematic_starts = ['the', 'so', 'but', 'a', 'and', 'an', 'than']
+    first_word = words[0].lower() if words else ""
+    if first_word in problematic_starts:
+        weight -= 0.4
+    
+    # Check for problematic content
+    tweet_text = tweet.get('clean_text', '').lower()
+    problematic_patterns = ['#', '@', 'i think', ' imo ', ' big ']
+    for pattern in problematic_patterns:
+        if pattern in tweet_text:
+            weight -= 0.4
+            break  # Only subtract once per tweet
+    
+    return weight
+
+
 
 
 # NOTE: Winners for Tian
@@ -221,6 +322,9 @@ if __name__ == "__main__":
     # pretty_print_results(winners, hosts, awards, min_count=n)
     # pretty_print_results(awards)
 
-    for award in awards:
-        print(award[1])
+    # Print top 40 weighted awards
+    print("\nTop 40 Weighted Awards:")
+    print("=" * 60)
+    for i, (award, weight) in enumerate(awards[:40]):
+        print(f"{i+1:2d}. {weight:6.2f} - {award}")
 
