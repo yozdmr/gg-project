@@ -1,4 +1,7 @@
 '''Version 0.5'''
+# Import the information extraction module
+from utils.information_extraction import process_tweets, load_data
+
 
 # Year of the Golden Globes ceremony being analyzed
 YEAR = "2013"
@@ -8,12 +11,32 @@ YEAR = "2013"
 # as the keys for their returned dictionaries
 # Students should populate this list with the actual award categories for their year, to avoid cascading errors on outputs that depend on correctly extracting award names (e.g., nominees, presenters, winner)
 AWARD_NAMES = [
-    "best motion picture - drama",
+    "best screenplay - motion picture",
+    "best director - motion picture",
+    "best performance by an actress in a television series - comedy or musical",
+    "best foreign language film",
+    "best performance by an actor in a supporting role in a motion picture",
+    "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",  # Edge case 3
     "best motion picture - comedy or musical",
+    "best performance by an actress in a motion picture - comedy or musical",
+    "best mini-series or motion picture made for television",
+    "best original score - motion picture",
+    "best performance by an actress in a television series - drama",
+    "best performance by an actress in a motion picture - drama",
+    "cecil b. demille award",
+    "best performance by an actor in a motion picture - comedy or musical",
+    "best motion picture - drama",
+    "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television",
+    "best performance by an actress in a supporting role in a motion picture",
+    "best television series - drama",
+    "best performance by an actor in a mini-series or motion picture made for television",
+    "best performance by an actress in a mini-series or motion picture made for television",
+    "best animated feature film",
+    "best original song - motion picture",
     "best performance by an actor in a motion picture - drama",
-    # Add or modify categories as needed for your year
-    "your custom award category",
-    # ... etc
+    "best television series - comedy or musical",
+    "best performance by an actor in a television series - drama",
+    "best performance by an actor in a television series - comedy or musical"
 ]
 
 def get_hosts(year):
@@ -49,7 +72,20 @@ def get_awards(year):
         - Award names should be extracted from tweets, not hardcoded
         - The only hardcoded part allowed is the word "Best"
     '''
-    # Your code here
+    # Load the preprocessed data
+    data_file = 'gg2013_preprocessed.jsonl'
+    gg_data = load_data(data_file)
+    
+    if not gg_data:
+        print(f"Error: Could not load data from {data_file}")
+        return []
+    
+    # Process tweets to extract awards using weighted system
+    weighted_awards = process_tweets(gg_data)
+    
+    # Extract just the award names (first element of each tuple)
+    awards = [award for award, weight in weighted_awards]
+    
     return awards
 
 def get_nominees(year):
@@ -148,9 +184,8 @@ def pre_ceremony():
         - This function should handle all one-time setup tasks
         - Print progress messages to help with debugging
     '''
-    # Your code here
+
     print("Pre-ceremony processing complete.")
-    return
 
 def main():
     '''Main function that orchestrates the Golden Globes analysis.
@@ -172,7 +207,24 @@ def main():
         - This function should coordinate all the analysis steps
         - Make sure to handle errors gracefully
     '''
-    # Your code here
+    print("Starting Golden Globes 2013 Analysis...")
+    
+    # Run pre-ceremony setup
+    pre_ceremony()
+    
+    # Extract awards
+    print("\nExtracting awards...")
+    awards = get_awards("2013")
+    
+    if awards:
+        print(f"✓ Successfully extracted {len(awards)} awards")
+        print("Award categories found:")
+        for i, award in enumerate(awards, 1):
+            print(f"  {i:2d}. {award}")
+    else:
+        print("✗ No awards extracted")
+    
+    print("\nAnalysis complete!")
     return
 
 if __name__ == '__main__':

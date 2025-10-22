@@ -6,41 +6,12 @@ import difflib
 from collections import defaultdict, Counter
 from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
 from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, \
-    extract_person_names, extract_awards
+    extract_person_names
+from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, merge_similar_awards_second_pass
 from utils.helpers.context_functions import award_winner_context, host_context
 # import gender_guesser as gender
 import spacy
 nlp = spacy.load("en_core_web_sm")
-
-
-GROUND_TRUTH_AWARDS = [
-        "best screenplay - motion picture",
-        "best director - motion picture",
-        "best performance by an actress in a television series - comedy or musical",
-        "best foreign language film",
-        "best performance by an actor in a supporting role in a motion picture",
-        "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",  # Edge case 3
-        "best motion picture - comedy or musical",
-        "best performance by an actress in a motion picture - comedy or musical",
-        "best mini-series or motion picture made for television",
-        "best original score - motion picture",
-        "best performance by an actress in a television series - drama",
-        "best performance by an actress in a motion picture - drama",
-        "cecil b. demille award",
-        "best performance by an actor in a motion picture - comedy or musical",
-        "best motion picture - drama",
-        "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television",
-        "best performance by an actress in a supporting role in a motion picture",
-        "best television series - drama",
-        "best performance by an actor in a mini-series or motion picture made for television",
-        "best performance by an actress in a mini-series or motion picture made for television",
-        "best animated feature film",
-        "best original song - motion picture",
-        "best performance by an actor in a motion picture - drama",
-        "best television series - comedy or musical",
-        "best performance by an actor in a television series - drama",
-        "best performance by an actor in a television series - comedy or musical"
-    ]
 
 
 # Load tweets
@@ -89,6 +60,8 @@ def find_matches(data, patterns, extract_function, context=None, context_functio
         return merge_similar_actors_awards(matches)
     return merge_similar_entries(matches)
 
+
+
 def extract_awards_from_tweets(data):
 
     hashtags = Counter()
@@ -106,6 +79,7 @@ def extract_awards_from_tweets(data):
     most_common_referenced = [tag for tag in hashtags.most_common(11) if tag[0] is not None][:10]  # Get top 10, drop None if present
     print(f"Most common referenced accounts: {[tag[0] for tag in most_common_referenced]}")
 
+    # Awards that start with "Best"
     filtered_tweets = []
     for tweet in data:
 
@@ -124,7 +98,8 @@ def extract_awards_from_tweets(data):
             if ":" in award_text:  # Eliminate retweet text (e.g. get rid of "@CNNshowbiz:")
                 award_text = award_text.split(":", 1)[-1]
         
-            cleaned = award_text.split("for")[0]  # Get everything before keyword "for"
+            if " for " in award_text:
+                cleaned = award_text.rsplit(" for ", 1)[0]
             cleaned = cleaned.rsplit(",", 1)[0].strip()  # Get everything before last comma
             cleaned = cleaned.split("and")[0]  # Get everything before "and"
 
@@ -147,15 +122,64 @@ def extract_awards_from_tweets(data):
             if hashtag_in_string:
                 continue
             # END
-
             
             # Skip awards that contain numbers
             if any(char.isdigit() for char in award_text):
                 continue
+                
+            # If 'cleaned' ends in " at" or " goes to", remove that and everything after
+            if cleaned.strip().endswith(" at"):
+                cleaned = cleaned.rsplit(" at", 1)[0]
+            elif cleaned.strip().endswith(" goes to"):
+                cleaned = cleaned.rsplit(" goes to", 1)[0]
+            elif cleaned.strip().endswith(" -"):
+                cleaned = cleaned.rsplit(" -", 1)[0]
             
 
+            # If 'best' is present, but not at the start, remove everything before 'best'
+            cleaned_lower = cleaned.lower()
+            best_idx = cleaned_lower.find("best")
+            if best_idx == -1:
+                continue
+            else:
+                if best_idx != 0:
+                    # Remove everything before 'best'
+                    cleaned = cleaned[best_idx:].strip()
+            
+
+            # If " is " is in cleaned, and pattern is r'\b\swinner of\s\b', then remove " is " and everything after
+            if " is " in cleaned and pattern == r'\b\swinner of\s\b':
+                cleaned = cleaned.split(" is ", 1)[0].strip()
+
+            # Replace dashes with no spaces around with nothing, and slashes with no spaces with a space
+            cleaned = re.sub(r'(?<=\w)-(?=\w)', ' ', cleaned)
+            cleaned = re.sub(r'(?<=\w)/(?=\w)', ' ', cleaned)
+
+            # Remove parentheses and replace '(' with '- ' if a subsection of the string is surrounded by them
+            def paren_to_dash(s):
+                # This replaces (TEXT) with - TEXT
+                # It will turn "... (foo) ..." into "... - foo ..."
+                return re.sub(r'\(([^)]+)\)', r'- \1', s)
+            cleaned = paren_to_dash(cleaned)
+
+
+            for_match = re.search(r'\bfor\b\s+(\w+)', cleaned, re.IGNORECASE)
+            if for_match:
+                word_after_for = for_match.group(1).lower()
+                if word_after_for != "television":
+                    # remove "for" and everything after
+                    cleaned = cleaned[:for_match.start()].strip()
+            
+            if " yet " in cleaned:
+                cleaned = cleaned.split(" yet ", 1)[0].strip()
+
+            if cleaned[-1] == '-':
+                cleaned = cleaned[:-1]
+
+
             # Add to list of tweets
-            filtered_tweets.append((tweet, cleaned, pattern))
+            filtered_tweets.append((tweet, cleaned.strip(), pattern))
+
 
     print(f"Found {len(filtered_tweets)} results")
 
@@ -168,7 +192,9 @@ def extract_awards_from_tweets(data):
     #       - Referenced by most common referenced accounts
     #   Lower if:
     #       - starts with lowercase "the", "[Ss]o", "[Bb]ut", "[Aa]\s", "[Aa]nd"
-    #       - contains # or @ or "i think" or "\simo\s", "\sbig\s"
+    #       - contains # or @ or "i think" or "\simo\s", "\sbig\s" 
+
+
 
     # Aggregate award candidates with weighted scoring
     award_candidates = defaultdict(float)
@@ -178,58 +204,26 @@ def extract_awards_from_tweets(data):
         award_candidates[cleaned_award] += weight
 
 
-    # Merge similar awards
-    
+    # Merge similar awards (first pass)
+    award_candidates = merge_normalized(award_candidates)
 
-
+    # Merge similar (second pass)
+    # This second pass is to handle merging cases like:
+    #   "best actor in a motion picture", "Best actor in a motion picture drama"
+    #   "best song", "Best Original Song"
+    #   "best actress", "best actress in a TV comedy or musical"
+    # Distinguishing between "actor" and "actress"
+    #   This way you don't accidentally merge "best actor XXX" and "best actress XXX"
+    # Pick longer case when merging similar awards, as longer is generally better
+    #   Or if one is contained within the other, pick the "parent"
+    # Potentialyl use TFIDF (clustering) for later sophistication?
+    # award_candidates = merge_similar_awards_second_pass(award_candidates)
     
     # Convert to list of tuples and sort by weight
     weighted_awards = [(award, weight) for award, weight in award_candidates.items()]
     weighted_awards.sort(key=lambda x: x[1], reverse=True)
     
     return weighted_awards
-
-def calculate_tweet_weight(tweet, award_text, most_common_referenced):
-    weight = 1.0
-    
-    # Positive weights
-    if award_text.lower().startswith('best'):
-        weight += 0.8
-    
-    # Check if more than 50% of words are title case
-    words = award_text.split()
-    if words:
-        title_case_words = sum(1 for word in words if word.istitle())
-        if title_case_words / len(words) > 0.5:
-            weight += 0.3
-    
-    # 4 or more words
-    if len(words) >= 4:
-        weight += 0.2
-    
-    # Referenced by most common referenced accounts
-    rt_user = tweet.get('rt_user')
-    qt_user = tweet.get('qt_user')
-    referenced_accounts = [account[0] for account in most_common_referenced]
-    if rt_user in referenced_accounts or qt_user in referenced_accounts:
-        weight += 0.3
-    
-    # Negative weights
-    # Check for problematic starts
-    problematic_starts = ['the', 'so', 'but', 'a', 'and', 'an', 'than']
-    first_word = words[0].lower() if words else ""
-    if first_word in problematic_starts:
-        weight -= 0.4
-    
-    # Check for problematic content
-    tweet_text = tweet.get('clean_text', '').lower()
-    problematic_patterns = ['#', '@', 'i think', ' imo ', ' big ']
-    for pattern in problematic_patterns:
-        if pattern in tweet_text:
-            weight -= 0.4
-            break  # Only subtract once per tweet
-    
-    return weight
 
 
 
@@ -258,29 +252,7 @@ def process_tweets(data):
     return awards
         
 
-# def pretty_print_results(winners, hosts, awards, min_count=10):
 def pretty_print_results(awards):
-    '''
-    print("\n" + "="*50)
-    print("WINNERS:")
-    print("="*50)
-    grouped_winners = defaultdict(list)
-    for (award, winner), count in winners.items():
-        if count >= min_count:
-            grouped_winners[award].append((winner, count))
-    for award, winner_list in grouped_winners.items():
-        print(award)
-        for winner, count in sorted(winner_list, key=lambda x: -x[1]):
-            print(f"\t{winner}: {count}")
-
-    print("\n" + "="*50)
-    print("HOSTS:")
-    print("="*50)
-    for host, count in hosts.items():
-        if count >= min_count:
-            print(f"{host}: {count}")
-    '''
-
     print("\n" + "="*50)
     print("AWARDS:")
     print("="*50)
@@ -312,19 +284,9 @@ if __name__ == "__main__":
     print(f"Process took {end_time-start_time:.2f} seconds")
 
 
-    # new_winners = {}
-    # for (award, winner), count in winners.items():
-    #     if award not in new_winners:
-    #         new_winners[award] = []
-    #     new_winners[award].append((winner, count))
-
-    # Print matches
-    # pretty_print_results(winners, hosts, awards, min_count=n)
-    # pretty_print_results(awards)
-
     # Print top 40 weighted awards
-    print("\nTop 40 Weighted Awards:")
+    print(f"\nTop 40/{len(awards)} Weighted Awards:")
     print("=" * 60)
     for i, (award, weight) in enumerate(awards[:40]):
-        print(f"{i+1:2d}. {weight:6.2f} - {award}")
+        print(f"{i+1:2d}. {weight:6.2f} - '{award}'")
 
