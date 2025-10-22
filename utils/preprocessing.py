@@ -2,6 +2,7 @@ import json
 import re
 import argparse
 from datetime import datetime
+from typing import Iterable, Iterator, Dict, Any, Optional
 
 
 USE_LANGDETECT = True # a switch to disable language detection entirely when not using
@@ -137,7 +138,7 @@ def split_rt_qt(text: str):
 
     return False, False, None, None, None, None, None
 
-def preprocess_one(tweet: dict) -> dict:
+def preprocess_one(tweet: Dict[str, Any]) -> Dict[str, Any]:
     """
     Input: original tweet dict (including at least 'text' and 'timestamp_ms').
     Output: a processed new dict with normalized text and useful extracted fields.
@@ -191,9 +192,23 @@ def load_json(path: str):
     """
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    if isinstance(data, dict):
-        data = data.get("tweets", [])
-    return data
+    return data.get("tweets", []) if isinstance(data, dict) else data
+
+def preprocess_stream(tweets: Iterable[Dict[str, Any]]) -> Iterator[Dict[str, Any]]:
+    for tw in tweets:
+        yield preprocess_one(tw)
+
+def preprocess_many(tweets: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    return list(preprocess_stream(tweets))
+
+def preprocess_file_to_jsonl(input_json: str, out_path: str) -> int:
+    data = load_json(input_json)
+    n = 0
+    with open(out_path, "w", encoding="utf-8") as w:
+        for rec in preprocess_stream(data):
+            w.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            n += 1
+    return n
 
 def main():
     ap = argparse.ArgumentParser()
@@ -202,16 +217,11 @@ def main():
                     help="output JSONL (one tweet per line)")
     args = ap.parse_args()
 
-    tweets = load_json(args.input_json)
-    n = 0
-    with open(args.out, "w", encoding="utf-8") as w:
-        for t in tweets:
-            out = preprocess_one(t)
-            w.write(json.dumps(out, ensure_ascii=False) + "\n")
-            n += 1
+    n = preprocess_file_to_jsonl(args.input_json, args.out)
     print(f"Done. Wrote {n} lines to {args.out}")
 
 if __name__ == "__main__":
     main()
+
 
 
