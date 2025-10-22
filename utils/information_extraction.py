@@ -9,7 +9,6 @@ from utils.helpers.text_matching import merge_similar_entries, merge_similar_act
     extract_person_names
 from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, merge_similar_awards_second_pass
 from utils.helpers.context_functions import award_winner_context, host_context
-# import gender_guesser as gender
 import spacy
 nlp = spacy.load("en_core_web_sm")
 
