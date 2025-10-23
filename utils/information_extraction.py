@@ -7,10 +7,41 @@ from collections import defaultdict, Counter
 from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
 from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, \
     extract_person_names
-from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, merge_similar_awards_second_pass
+from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, \
+        merge_similar_awards_second_pass, extract_best_candidates
 from utils.helpers.context_functions import award_winner_context, host_context
 import spacy
 nlp = spacy.load("en_core_web_sm")
+
+
+AWARD_NAMES = [
+    "best screenplay - motion picture",
+    "best director - motion picture",
+    "best performance by an actress in a television series - comedy or musical",
+    "best foreign language film",
+    "best performance by an actor in a supporting role in a motion picture",
+    "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",  # Edge case 3
+    "best motion picture - comedy or musical",
+    "best performance by an actress in a motion picture - comedy or musical",
+    "best mini-series or motion picture made for television",
+    "best original score - motion picture",
+    "best performance by an actress in a television series - drama",
+    "best performance by an actress in a motion picture - drama",
+    "cecil b. demille award",
+    "best performance by an actor in a motion picture - comedy or musical",
+    "best motion picture - drama",
+    "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television",
+    "best performance by an actress in a supporting role in a motion picture",
+    "best television series - drama",
+    "best performance by an actor in a mini-series or motion picture made for television",
+    "best performance by an actress in a mini-series or motion picture made for television",
+    "best animated feature film",
+    "best original song - motion picture",
+    "best performance by an actor in a motion picture - drama",
+    "best television series - comedy or musical",
+    "best performance by an actor in a television series - drama",
+    "best performance by an actor in a television series - comedy or musical"
+]
 
 
 # Load tweets
@@ -100,42 +131,37 @@ def extract_awards_from_tweets(data):
             if " for " in award_text:
                 cleaned = award_text.rsplit(" for ", 1)[0]
             cleaned = cleaned.rsplit(",", 1)[0].strip()  # Get everything before last comma
-            cleaned = cleaned.split("and")[0]  # Get everything before "and"
+            cleaned = cleaned.split("and")[0]  # Get everything before "and", award names do not contain "and"
+            cleaned = cleaned.split("#")[0]  # Remove trailing hashtags in tweets
 
-            cleaned = cleaned.split("at the #")[0]  # Get everything before "#"
-            cleaned = cleaned.split("#")[0]
-
-            # Get rid of common matches that contain "my" and "gang" that are not awards
-            if any(x in award_text.lower() for x in ["my", "gang"]):
-                continue
-
+            # Award names must be longer than 1 word
             if len(cleaned.split()) <= 1:  # Get rid of trimmed awards that are too short
                 continue
 
-            # START Get rid of awards that contain the most common hashtag (should be Golden Globes)
+            # START Get rid of awards that contain the most common hashtag (should be Golden Globes for this dataset)
+            #   This way remove cases like "... winner in the Golden Globes!"
             hashtag_in_string = True
             for word in most_common_hashtag:
                 if word.lower() not in cleaned.lower():
                     hashtag_in_string = False
-            
             if hashtag_in_string:
                 continue
             # END
             
-            # Skip awards that contain numbers
+            # Skip awards that contain numbers, no award name contains numbers.
             if any(char.isdigit() for char in award_text):
                 continue
                 
             # If 'cleaned' ends in " at" or " goes to", remove that and everything after
+            #   These two phrases indicate a phrase afterwards that is not related to an award name.
             if cleaned.strip().endswith(" at"):
                 cleaned = cleaned.rsplit(" at", 1)[0]
             elif cleaned.strip().endswith(" goes to"):
                 cleaned = cleaned.rsplit(" goes to", 1)[0]
-            elif cleaned.strip().endswith(" -"):
-                cleaned = cleaned.rsplit(" -", 1)[0]
             
 
             # If 'best' is present, but not at the start, remove everything before 'best'
+            # This case also removes all awards that don't start with best.
             cleaned_lower = cleaned.lower()
             best_idx = cleaned_lower.find("best")
             if best_idx == -1:
@@ -150,7 +176,7 @@ def extract_awards_from_tweets(data):
             if " is " in cleaned and pattern == r'\b\swinner of\s\b':
                 cleaned = cleaned.split(" is ", 1)[0].strip()
 
-            # Replace dashes with no spaces around with nothing, and slashes with no spaces with a space
+            # Replace dashes and slashes with NO SPACES AROUND THEM with a space
             cleaned = re.sub(r'(?<=\w)-(?=\w)', ' ', cleaned)
             cleaned = re.sub(r'(?<=\w)/(?=\w)', ' ', cleaned)
 
@@ -162,6 +188,8 @@ def extract_awards_from_tweets(data):
             cleaned = paren_to_dash(cleaned)
 
 
+            # Eliminate unnecessary phrases after "for":
+            #   "Don Cheadle *wins* Best Actor - Motion Picture FOR his amazing performances this year."
             for_match = re.search(r'\bfor\b\s+(\w+)', cleaned, re.IGNORECASE)
             if for_match:
                 word_after_for = for_match.group(1).lower()
@@ -169,11 +197,17 @@ def extract_awards_from_tweets(data):
                     # remove "for" and everything after
                     cleaned = cleaned[:for_match.start()].strip()
             
+            # Clean cases like:
+            #   "Ben Affleck *won* Best Director - Motion Picture, YET people still won't consider him for the Emmys!""
             if " yet " in cleaned:
                 cleaned = cleaned.split(" yet ", 1)[0].strip()
-
-            if cleaned[-1] == '-':
-                cleaned = cleaned[:-1]
+            
+            # Common issues with matches that result in not matching
+            #    (is this allowed?)
+            cleaned = cleaned.lower()
+            cleaned = cleaned.replace("tv", "television")
+            cleaned = cleaned.replace("best actor", "best performance by an actor")
+            cleaned = cleaned.replace("best actress", "best performance by an actress")
 
 
             # Add to list of tweets
@@ -220,9 +254,10 @@ def extract_awards_from_tweets(data):
     
     # Convert to list of tuples and sort by weight
     weighted_awards = [(award, weight) for award, weight in award_candidates.items()]
-    weighted_awards.sort(key=lambda x: x[1], reverse=True)
+    best_candidates = extract_best_candidates(weighted_awards, score_factor=0.5)
     
-    return weighted_awards
+    return [(k, v) for k, v in best_candidates.items()]
+    # return best_candidates
 
 
 
@@ -255,7 +290,7 @@ def pretty_print_results(awards):
     print("\n" + "="*50)
     print("AWARDS:")
     print("="*50)
-    ground_truth_set = set(GROUND_TRUTH_AWARDS)
+    ground_truth_set = set(AWARD_NAMES)
     sorted_awards = sorted(awards.items(), key=lambda x: -x[1])
     for award, count in sorted_awards:
         if count > 10:
@@ -284,8 +319,26 @@ if __name__ == "__main__":
 
 
     # Print top 40 weighted awards
-    print(f"\nTop 40/{len(awards)} Weighted Awards:")
-    print("=" * 60)
-    for i, (award, weight) in enumerate(awards[:40]):
-        print(f"{i+1:2d}. {weight:6.2f} - '{award}'")
+    # print(f"\nTop 40/{len(awards)} Weighted Awards:")
+    # print("=" * 60)
+    # for i, (award, weight) in enumerate(awards[:40]):
+    #     print(f"{i+1:2d}. {weight:6.2f} - '{award}'")    
+
+    # Print all candidates with candidate_weight not equal to 0
+    # Sort by descending candidate_weight, then alphabetically for tie-break
+
+    print("\nCandidates with non-zero candidate_weight (sorted):")
+    sorted_candidates = sorted(
+        awards,
+        key=lambda x: (-x[1], x[0])
+    )
+    for award_text, candidate_weight in sorted_candidates:
+        print(f"{candidate_weight:.2f}\t{award_text}")
+
+    # for award, score in sorted_candidates:
+    #     max_similarity = max(
+    #         difflib.SequenceMatcher(None, award.lower(), ground_truth_award.lower()).ratio()
+    #         for ground_truth_award in set(AWARD_NAMES))
+    #     print(f"{max_similarity:.2f}\t{award}: {score}")
+
 

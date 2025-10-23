@@ -94,6 +94,44 @@ def merge_normalized(awards, threshold=85):
     return {data['original']: data['weight'] for data in normalized_map.values()}
 
 
+def extract_best_candidates(awards, score_factor=0.6):
+    best_candidates = {}
+    for award, weight in awards:
+        in_a_count = award.lower().count(" in a ")
+        dash_count = award.lower().count(" - ")
+        made_for_count = award.lower().count(" made for ")
+
+        candidate_weight = 0.0
+        if dash_count == 1:
+            candidate_weight += 1
+        
+        if in_a_count >= 1:
+            candidate_weight += 0.9
+        if in_a_count == 2:
+            candidate_weight += 0.3
+        
+        if made_for_count == 1:
+            candidate_weight += 0.8
+        
+        if candidate_weight != 0.0:
+            best_candidates[(award, weight)] = candidate_weight
+    
+    # Normalize weights to the range 0-1
+    weights = [elem[1] for elem in best_candidates.keys()]
+    wmin, wmax = min(weights), max(weights)
+    normalized_weights = [(w - wmin) / (wmax - wmin) if wmax > wmin else 0.0 for w in weights]
+
+    # Add normalized weight to candidate_weight
+    # First, create a mapping of (award, weight) -> normalized_weight
+    normalized_weight_map = {
+        key: norm_w for key, norm_w in zip(best_candidates.keys(), normalized_weights)
+    }
+    # Now, update each value in best_candidates by adding the normalized weight
+    best_candidates = {
+        k[0]: v + normalized_weight_map[k]*score_factor for k, v in best_candidates.items()
+    }
+
+    return best_candidates
 
 def extract_gender_keywords(award_name):
     gender_keywords = {
