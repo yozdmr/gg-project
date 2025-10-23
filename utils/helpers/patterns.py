@@ -15,10 +15,9 @@ nominated_patterns = [
 
 # patterns for identifying hosts of awards
 host_patterns = [
-    r'\bhost\b',
-    r'\bhosts\b',
-    r'\bhosted\b',
-    r'\bhosting\b'
+    r'\b(host(?:ed|ing)?(?:\s+by)?|hosts?)\b',
+    r'\b(?:hosted\s+by|host(?:s|ing)?\s+(?:by\s+)?(?:and\s+)?[A-Z][a-z]+)\b',
+    r'\b(?:[A-Z][a-z]+\s+[A-Z][a-z]+\s+(?:and\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+)?host(?:s|ed|ing)?)\b'
 ]
 
 award_patterns = {

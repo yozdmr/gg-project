@@ -13,11 +13,3 @@ def award_winner_context(tweet_text, award_names, extract_function):
                 award_winner_pairs.append((award_name, winner))
     
     return award_winner_pairs
-
-# extract hosts only from tweets that don't mention specific award names
-def host_context(tweet_text, award_names, extract_function):
-    # only check tweets that don't have an award name in it
-    if not any(re.search(re.escape(award_name), tweet_text, re.IGNORECASE) for award_name in award_names):
-        # extract hosts from tweet
-        return extract_function(tweet_text)
-    return []

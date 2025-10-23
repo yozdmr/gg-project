@@ -7,38 +7,45 @@ from collections import defaultdict
 # load spaCy language model
 nlp = spacy.load("en_core_web_sm")
 
+MONONYMS = {"Cher", "Adele", "Madonna", "Prince", "Seal", "Pink"}
 
 def is_valid_person_name(name, context=""):
-        if not name: return False
-        parts = name.split()
-        # must have at least 2 parts unless it's a known single (Cher, Adele)
-        if len(parts) == 1 and len(parts[0]) < 4:
-            return True
-        if len(parts) == 1:
+    if not name:
+        return False
+    name = name.strip()
+
+    # filter out awards/hosting context
+    if re.search(r"\b(golden|globes?|awards?|academy|oscars?|emmys?|grammys?|hosting?|hosted|category|best)\b",
+                 name, re.IGNORECASE):
+        return False
+
+    # tokenize “words” and require at least 2 tokens unless mononym
+    # this way we know it's a name
+    parts = [p for p in name.split() if re.match(r"^[A-Za-z][A-Za-z\-'’]*$", p)]
+    if len(parts) < 2 and name not in MONONYMS:
+        return False
+
+    # capitalization
+    for p in parts:
+        if not re.match(r"^[A-Z][a-z]+(?:[-'][A-Z][a-z]+)*$", p):
             return False
-        
-        # check capitalization
-        for p in parts:
-            if not re.match(r"^[A-Z][a-z]+(?:[-'][A-Z][a-z]+)*$", p):
-                return False
-        
-        # reject if context contains award-y verbs
-        if context and any(word in context.lower() for word in ["wins", "award", "hosting", "globes"]):
-            return False
-        
-        return True
+
+    return True
 
 # get the names of people
 #   use regex and spaCy to identify names
-def extract_person_names(text):
+def extract_person_names(text, *, context_text=None):
     doc = nlp(text)
-    person_names = []
+    names = []
     
     for ent in doc.ents:
-        if ent.label_ == "PERSON" and is_valid_person_name(ent.text, context=None):
-            person_names.append(ent.text)
+        if ent.label_ != "PERSON":
+            continue
+        candidate = ent.text.strip()
+        if is_valid_person_name(candidate, context=context_text or text):
+            names.append(candidate)
     
-    return person_names
+    return names
 
 
 ''' get the names of awards
