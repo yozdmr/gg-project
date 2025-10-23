@@ -359,7 +359,7 @@ if __name__ == '__main__':
         exit(1)
     
     # Sample award names for testing
-    sample_awards = [
+    TRUE_AWARDS = [
         "best screenplay - motion picture",
         "best director - motion picture",
         "best performance by an actress in a television series - comedy or musical",
@@ -387,14 +387,169 @@ if __name__ == '__main__':
         "best performance by an actor in a television series - drama",
         "best performance by an actor in a television series - comedy or musical"
     ]
+
+    TRUE_NOMINEES = {
+        "best screenplay - motion picture": [
+            "zero dark thirty",
+            "lincoln",
+            "silver linings playbook",
+            "argo"
+        ],
+        "best director - motion picture": [
+            "kathryn bigelow",
+            "ang lee",
+            "steven spielberg",
+            "quentin tarantino"
+        ],
+        "best performance by an actress in a television series - comedy or musical": [
+            "zooey deschanel",
+            "tina fey",
+            "julia louis-dreyfus",
+            "amy poehler"
+        ],
+        "best foreign language film": [
+            "the intouchables",
+            "kon tiki",
+            "a royal affair",
+            "rust and bone"
+        ],
+        "best performance by an actor in a supporting role in a motion picture": [
+            "alan arkin",
+            "leonardo dicaprio",
+            "philip seymour hoffman",
+            "tommy lee jones"
+        ],
+        "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television": [
+            "hayden panettiere",
+            "archie panjabi",
+            "sarah paulson",
+            "sofia vergara"
+        ],
+        "best motion picture - comedy or musical": [
+            "the best exotic marigold hotel",
+            "moonrise kingdom",
+            "salmon fishing in the yemen",
+            "silver linings playbook"
+        ],
+        "best performance by an actress in a motion picture - comedy or musical": [
+            "emily blunt",
+            "judi dench",
+            "maggie smith",
+            "meryl streep"
+        ],
+        "best mini-series or motion picture made for television": [
+            "the girl",
+            "hatfields & mccoys",
+            "the hour",
+            "political animals"
+        ],
+        "best original score - motion picture": [
+            "argo",
+            "anna karenina",
+            "cloud atlas",
+            "lincoln"
+        ],
+        "best performance by an actress in a television series - drama": [
+            "connie britton",
+            "glenn close",
+            "michelle dockery",
+            "julianna margulies"
+        ],
+        "best performance by an actress in a motion picture - drama": [
+            "marion cotillard",
+            "sally field",
+            "helen mirren",
+            "naomi watts",
+            "rachel weisz"
+        ],
+        "cecil b. demille award": [],
+        "best performance by an actor in a motion picture - comedy or musical": [
+            "jack black",
+            "bradley cooper",
+            "ewan mcgregor",
+            "bill murray"
+        ],
+        "best motion picture - drama": [
+            "django unchained",
+            "life of pi",
+            "lincoln",
+            "zero dark thirty"
+        ],
+        "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television": [
+            "max greenfield",
+            "danny huston",
+            "mandy patinkin",
+            "eric stonestreet"
+        ],
+        "best performance by an actress in a supporting role in a motion picture": [
+            "amy adams",
+            "sally field",
+            "helen hunt",
+            "nicole kidman"
+        ],
+        "best television series - drama": [
+            "boardwalk empire",
+            "breaking bad",
+            "downton abbey (masterpiece)",
+            "the newsroom"
+        ],
+        "best performance by an actor in a mini-series or motion picture made for television": [
+            "benedict cumberbatch",
+            "woody harrelson",
+            "toby jones",
+            "clive owen"
+        ],
+        "best performance by an actress in a mini-series or motion picture made for television": [
+            "nicole kidman",
+            "jessica lange",
+            "sienna miller",
+            "sigourney weaver"
+        ],
+        "best animated feature film": [
+            "frankenweenie",
+            "hotel transylvania",
+            "rise of the guardians",
+            "wreck-it ralph"
+        ],
+        "best original song - motion picture": [
+            "act of valor",
+            "stand up guys",
+            "the hunger games",
+            "les miserables"
+        ],
+        "best performance by an actor in a motion picture - drama": [
+            "richard gere",
+            "john hawkes",
+            "joaquin phoenix",
+            "denzel washington"
+        ],
+        "best television series - comedy or musical": [
+            "the big bang theory",
+            "episodes",
+            "modern family",
+            "smash"
+        ],
+        "best performance by an actor in a television series - drama": [
+            "steve buscemi",
+            "bryan cranston",
+            "jeff daniels",
+            "jon hamm"
+        ],
+        "best performance by an actor in a television series - comedy or musical": [
+            "alec baldwin",
+            "louis c.k.",
+            "matt leblanc",
+            "jim parsons"
+        ]
+    }
     
-    print(f"Running identify_winners on {len(data)} tweets with {len(sample_awards)} awards...")
+    print(f"Running identify_winners on {len(data)} tweets with {len(TRUE_AWARDS)} awards...")
     
     # Call identify_winners
     votes, winners, topk = identify_winners(
         tweets=data,
-        award_names=sample_awards,
-        nominees_by_award={},
+        award_names=TRUE_AWARDS,
+        nominees_by_award=TRUE_NOMINEES,
         person_extractor=extract_person_names,
         strict_nominees=False
     )
