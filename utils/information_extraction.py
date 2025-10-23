@@ -228,7 +228,6 @@ def extract_awards_from_tweets(data):
     #       - contains # or @ or "i think" or "\simo\s", "\sbig\s" 
 
 
-
     # Aggregate award candidates with weighted scoring
     award_candidates = defaultdict(float)
     
@@ -239,25 +238,46 @@ def extract_awards_from_tweets(data):
 
     # Merge similar awards (first pass)
     award_candidates = merge_normalized(award_candidates)
-
-    # Merge similar (second pass)
-    # This second pass is to handle merging cases like:
-    #   "best actor in a motion picture", "Best actor in a motion picture drama"
-    #   "best song", "Best Original Song"
-    #   "best actress", "best actress in a TV comedy or musical"
-    # Distinguishing between "actor" and "actress"
-    #   This way you don't accidentally merge "best actor XXX" and "best actress XXX"
-    # Pick longer case when merging similar awards, as longer is generally better
-    #   Or if one is contained within the other, pick the "parent"
-    # Potentialyl use TFIDF (clustering) for later sophistication?
-    # award_candidates = merge_similar_awards_second_pass(award_candidates)
     
     # Convert to list of tuples and sort by weight
     weighted_awards = [(award, weight) for award, weight in award_candidates.items()]
+    # Best candidates weights the list of awards by common features found in awards
+    #   and selects accordingly
     best_candidates = extract_best_candidates(weighted_awards, score_factor=0.5)
+    list_of_awards = [k for k, v in best_candidates.items()]
+
+
+    # r'\b(([A-Z][a-z]*|[A-Z].)\s)+[Aa]ward\b'
+
+
+    second_award_group = defaultdict(int)
+    for tweet in data:
+        match = re.search(
+            r'\b(([A-Z][a-z]*|[A-Z].)\s){3,4}[Aa]ward\b', 
+            tweet['clean_text']
+        )
+        
+        if not match:
+            continue
+
+        match_string = match.group(0)
+
+        win_condition_words = ["win", "achievement", "present", "receive"]
+        invalid_award_words = ["the", "is", "just", " for ", "globe"]
+        match_string_lower = match_string.lower()
+        # Skip if any win condition or invalid award word is in the match
+        if any(word in match_string_lower for word in win_condition_words + invalid_award_words):
+            continue
+
+        second_award_group[match_string_lower] += 1
     
-    return [(k, v) for k, v in best_candidates.items()]
-    # return best_candidates
+    second_group_merged = merge_normalized(second_award_group)
+    if second_group_merged:
+        # Find key with highest value
+        best_award = max(second_group_merged.items(), key=lambda item: item[1])[0]
+        list_of_awards.append(best_award)
+
+    return list_of_awards
 
 
 

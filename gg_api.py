@@ -81,10 +81,7 @@ def get_awards(year):
         return []
     
     # Process tweets to extract awards using weighted system
-    weighted_awards = process_tweets(gg_data)
-    
-    # Extract just the award names (first element of each tuple)
-    awards = [award for award, weight in weighted_awards]
+    awards = process_tweets(gg_data)
     
     return awards
 
