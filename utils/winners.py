@@ -331,11 +331,13 @@ def identify_winners(tweets: List[dict],
     # merge near-duplicates (award key preserved and person normalized)
     if votes:
         votes = safe_merge_actors_awards(votes)
+    else:
+        votes = {}
 
     # produce winners and top-k lists per award
     grouped = defaultdict(list)
-    for (award, candidate), c in votes.items():
-        grouped[award].append((candidate, c))
+    for (award, candidate), vote_count in votes.items():
+        grouped[award].append((candidate, vote_count))
 
     winners, topk = {}, {}
     for award, lst in grouped.items():
@@ -346,5 +348,79 @@ def identify_winners(tweets: List[dict],
     return dict(votes), winners, topk
 
 
-
-
+if __name__ == '__main__':
+    from utils.information_extraction import load_data, extract_person_names
+    
+    print("Loading sample data...")
+    # Load sample data
+    data = load_data('gg2013_preprocessed.jsonl')
+    if not data:
+        print("Error: Could not load data")
+        exit(1)
+    
+    # Sample award names for testing
+    sample_awards = [
+        "best screenplay - motion picture",
+        "best director - motion picture",
+        "best performance by an actress in a television series - comedy or musical",
+        "best foreign language film",
+        "best performance by an actor in a supporting role in a motion picture",
+        "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",  # Edge case 3
+        "best motion picture - comedy or musical",
+        "best performance by an actress in a motion picture - comedy or musical",
+        "best mini-series or motion picture made for television",
+        "best original score - motion picture",
+        "best performance by an actress in a television series - drama",
+        "best performance by an actress in a motion picture - drama",
+        "cecil b. demille award",
+        "best performance by an actor in a motion picture - comedy or musical",
+        "best motion picture - drama",
+        "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television",
+        "best performance by an actress in a supporting role in a motion picture",
+        "best television series - drama",
+        "best performance by an actor in a mini-series or motion picture made for television",
+        "best performance by an actress in a mini-series or motion picture made for television",
+        "best animated feature film",
+        "best original song - motion picture",
+        "best performance by an actor in a motion picture - drama",
+        "best television series - comedy or musical",
+        "best performance by an actor in a television series - drama",
+        "best performance by an actor in a television series - comedy or musical"
+    ]
+    
+    print(f"Running identify_winners on {len(data)} tweets with {len(sample_awards)} awards...")
+    
+    # Call identify_winners
+    votes, winners, topk = identify_winners(
+        tweets=data,
+        award_names=sample_awards,
+        nominees_by_award={},
+        person_extractor=extract_person_names,
+        strict_nominees=False
+    )
+    
+    print("\n" + "="*60)
+    print("WINNERS (Top candidate per award):")
+    print("="*60)
+    for award, winner in winners.items():
+        print(f"{award}: {winner}")
+    
+    print("\n" + "="*60)
+    print("TOP CANDIDATES (All candidates ranked by votes):")
+    print("="*60)
+    for award, candidates in topk.items():
+        print(f"\n{award}:")
+        for i, (candidate, vote_count) in enumerate(candidates, 1):
+            print(f"  {i}. {candidate} ({vote_count} votes)")
+    
+    print("\n" + "="*60)
+    print("SUMMARY STATISTICS:")
+    print("="*60)
+    print(f"Total awards processed: {len(winners)}")
+    print(f"Votes type: {type(votes)}")
+    print(f"Votes content: {votes}")
+    if isinstance(votes, dict):
+        print(f"Total vote pairs: {len(votes)}")
+    else:
+        print(f"Votes is not a dict, it's: {votes}")
+    print(f"Average candidates per award: {sum(len(candidates) for candidates in topk.values()) / len(topk):.1f}")

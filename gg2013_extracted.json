@@ -1,0 +1,72 @@
+{
+  "extracted_awards": {
+    "awards": [
+      "best supporting actress in a motion picture",
+      "best supporting actress in a miniseries",
+      "best performance by an actress in a musical comedy",
+      "best supporting actress - television",
+      "best performance by an actress in a miniseries or television movie",
+      "best performance by an actor in a miniseries or motion picture made for television",
+      "best performance by an actress in a television series drama",
+      "best performance by an actor in a drama",
+      "best performance by an actor in a television drama",
+      "best performance by an actor in a miniseries or motion picture made",
+      "best performance by an actress motion picture - comedy or musical",
+      "best performance by an actress in a comedy",
+      "best performance by an actress in a comedy or musical movie",
+      "best director - motion picture",
+      "best performance by an actor in a comedy or musical television series",
+      "best performance by an actor in a television comedy or musical",
+      "best performance by an actor in a comedy show",
+      "best animated film - great year",
+      "best performance by an actress in a television musical or comedy",
+      "best performance by an actress in a comedy television series - comedy or musical",
+      "best television series actress - comedy or musical",
+      "best performance by an actor in a motion picture",
+      "best performance by an actor in a motion picture comedy or musical",
+      "best performance by an actress in a dramatic film",
+      "best lead actor in a drama",
+      "best performance by an actor in a motion picture in the drama category",
+      "cecil b. demile award"
+    ]
+  },
+  "extracted_hosts": [
+    "Amy Poehler",
+    "Tina Fey"
+  ],
+  "extracted_winners": {
+    "winners": {
+      "best lead actor in a drama": "Daniel Day Lewis",
+      "best supporting actress in a miniseries": "Maggie Smith",
+      "best performance by an actress in a musical comedy": "Jennifer Lawrence",
+      "best performance by an actress in a comedy or musical movie": "Jennifer Lawrence",
+      "best performance by an actress in a comedy": "Lena Dunham",
+      "best performance by an actor in a comedy show": "Don Cheadle",
+      "cecil b. demile award": "Jodie Foster",
+      "best performance by an actor in a drama": "Daniel Day Lewis"
+    },
+    "candidate_winners": [
+      "Damian Lewis",
+      "Brit Damien Lewis",
+      "Christof Waltz",
+      "Anne Hathaway",
+      "Somehow Amy Poehler",
+      "Julianne Moore",
+      "Claire Danes",
+      "Julianna Moore",
+      "Sally Field",
+      "Anne Hathaway",
+      "Hugh Jackman",
+      "Les Miserables",
+      "Jennifer Lawrence",
+      "Amy Poehler",
+      "Congrats Lena Dunham",
+      "Sorry Amy Tina",
+      "Hugh Jackman",
+      "Chris Tucker",
+      "Kevin Spacey"
+    ]
+  },
+  "extracted_nominees": {},
+  "extracted_presenters": {}
+}

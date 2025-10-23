@@ -7,7 +7,7 @@ from collections import defaultdict, Counter
 from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
 from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, extract_person_names
 from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, extract_best_candidates
-from utils.helpers.context_functions import award_winner_context, host_context
+from utils.winners import identify_winners
 # import spacy
 # nlp = spacy.load("en_core_web_sm")
 
@@ -289,10 +289,20 @@ def extract_awards_from_tweets(data):
 
 
 
-# NOTE: Winners for Tian
-def extract_winners_from_tweets(data, awards):
-    return find_matches(data, winning_patterns, extract_function=extract_person_names,
-                        context=awards, context_function=award_winner_context)
+def extract_winners_from_tweets(data, awards, nominees_by_award=None):
+    if nominees_by_award is None:
+        nominees_by_award = {}
+    
+    # Use the identify_winners function from winners.py
+    _, winners, topk = identify_winners(
+        tweets=data,
+        award_names=awards,
+        nominees_by_award=nominees_by_award,
+        person_extractor=extract_person_names,
+        strict_nominees=False  # Allow non-nominees to be winners
+    )
+    
+    return winners, topk
 
 def extract_hosts_from_tweets(data, awards):
     """
@@ -360,73 +370,14 @@ def extract_hosts_from_tweets(data, awards):
     top = sorted(scores.items(), key=lambda x: -x[1])
     return dict(top[:2])
 
-def process_tweets(data):
+def process_tweets(data, nominees_by_award=None):
     print("Extracting awards...")
     awards = extract_awards_from_tweets(data)
 
-    # print("Extracting winners...")
-    # winners = extract_winners_from_tweets(data, awards)
+    print("Extracting winners...")
+    winners, winner_candidates = extract_winners_from_tweets(data, awards, nominees_by_award)
 
-    # print("Extracting hosts...")
-    # hosts = extract_hosts_from_tweets(data, awards)
+    print("Extracting hosts...")
+    hosts = extract_hosts_from_tweets(data, awards)
 
-    # return winners, hosts, awards
-    return awards
-        
-
-def pretty_print_results(awards):
-    print("\n" + "="*50)
-    print("AWARDS:")
-    print("="*50)
-    ground_truth_set = set(AWARD_NAMES)
-    sorted_awards = sorted(awards.items(), key=lambda x: -x[1])
-    for award, count in sorted_awards:
-        if count > 10:
-            max_similarity = max(
-                difflib.SequenceMatcher(None, award.lower(), ground_truth_award.lower()).ratio()
-                for ground_truth_award in ground_truth_set)
-            print(f"{max_similarity:.2f}\t{award}: {count}")
-
-
-
-if __name__ == "__main__":
-    data_file = 'gg2013_preprocessed.jsonl'
-    n = 10
-
-    # Load the main data file
-    gg_data = load_data(data_file)
-    if gg_data:
-        print(f"Loaded {len(gg_data)} items from {data_file}")
-
-    # Measure time taken for process_tweets
-    start_time = time.time()
-    # winners, hosts, awards = process_tweets(gg_data)
-    awards = process_tweets(gg_data)
-    end_time = time.time()
-    print(f"Process took {end_time-start_time:.2f} seconds")
-
-
-    # Print top 40 weighted awards
-    # print(f"\nTop 40/{len(awards)} Weighted Awards:")
-    # print("=" * 60)
-    # for i, (award, weight) in enumerate(awards[:40]):
-    #     print(f"{i+1:2d}. {weight:6.2f} - '{award}'")    
-
-    # Print all candidates with candidate_weight not equal to 0
-    # Sort by descending candidate_weight, then alphabetically for tie-break
-
-    print("\nCandidates with non-zero candidate_weight (sorted):")
-    sorted_candidates = sorted(
-        awards,
-        key=lambda x: (-x[1], x[0])
-    )
-    for award_text, candidate_weight in sorted_candidates:
-        print(f"{candidate_weight:.2f}\t{award_text}")
-
-    # for award, score in sorted_candidates:
-    #     max_similarity = max(
-    #         difflib.SequenceMatcher(None, award.lower(), ground_truth_award.lower()).ratio()
-    #         for ground_truth_award in set(AWARD_NAMES))
-    #     print(f"{max_similarity:.2f}\t{award}: {score}")
-
-
+    return (winners, winner_candidates), hosts, awards
