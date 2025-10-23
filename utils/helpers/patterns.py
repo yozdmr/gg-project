@@ -20,10 +20,16 @@ host_patterns = [
     r'\b(?:[A-Z][a-z]+\s+[A-Z][a-z]+\s+(?:and\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+)?host(?:s|ed|ing)?)\b'
 ]
 
-# patterns for identifying awards
-award_patterns = [
-    r"\bBest\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*",
-    r"\bOutstanding\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*",
-    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+Award",
-    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Achievement|Choice|Prize)\b",
-]
+award_patterns = {
+    r'\b\swins\s\b': 1,
+    r'\b\swinner of\s\b': 1,
+    r'\b\sgoes to\s\b': 0,
+    r'\b\sreceives\s\b': 1,
+    r'\b\stakes home\s\b': 1,
+    r'\b\sclaims\s\b': 1,
+    r'\b\swon\s\b': 1,
+    r'\b\ssecures\s\b': 1,
+    r'\b\scaptures\s\b': 1,
+    r'\b\snominated for\s\b': 1,
+    # r'\b(([A-Z][a-z]*|[A-Z].)\s)+[Aa]ward\b': 0,  # Separate rule!!!
+}
