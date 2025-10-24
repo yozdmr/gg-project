@@ -67,7 +67,7 @@ TITLE_AWARD_HINT = re.compile(
 )
 
 # Normalization & utilities
-def _normalize_award(s: str) -> str:
+def normalize_award(s: str) -> str:
     """Light canonicalization for comparing award names (case/punct tolerant)."""
     s = (s or "").lower().replace("&", "and")
     s = re.sub(r"\bmini[-\s]*series\b", "miniseries", s)
@@ -75,16 +75,16 @@ def _normalize_award(s: str) -> str:
     s = re.sub(r"[^a-z0-9\s-]", " ", s)  # keep hyphen
     return re.sub(r"\s+", " ", s).strip()
 
-def _award_anchors(name: str) -> set:
+def award_anchors(name: str) -> set:
     """Extract anchor tokens from an award name (remove bland words)."""
-    toks = _normalize_award(name).split()
+    toks = normalize_award(name).split()
     return {t for t in toks if t not in AWARD_STOPWORDS}
 
-def _build_award_index(awards: List[str]) -> Dict[str, set]:
+def build_award_index(awards: List[str]) -> Dict[str, set]:
     """Precompute anchors per award for matching."""
-    return {a: _award_anchors(a) for a in awards}
+    return {a: award_anchors(a) for a in awards}
 
-def _canon_person(s: str) -> str:
+def canon_person(s: str) -> str:
     """Normalize person names for merging (Title Case, drop mentions/punct)."""
     s = re.sub(r"[@#]\w+", " ", s or "")
     s = re.sub(r"[^A-Za-z\s\.]", " ", s)
@@ -133,14 +133,19 @@ def pick_text_candidates(tweet: dict) -> List[Tuple[str, int]]:
     if t and t not in seen: cands.append((t, WEIGHT_RAW)); seen.add(t)
     return cands
 
-def _extract_titles_from_span(span: str, candidates: List[str]) -> List[str]:
-    """For work-type awards: return nominees literally appear in the span."""
-    if not span or not candidates:
-        return []
-    low = span.lower()
-    return [c for c in candidates if c and c.lower() in low]
+TITLE_CHUNK_RE = re.compile(
+    r'"([^"]{2,80})"|((?:[A-Z][a-z0-9\'&\-\:]+)(?:\s+(?:[A-Z][a-z0-9\'&\-\:]+)){0,5})'
+)
+def extract_titles_free(span: str) -> List[str]:
+    found = set()
+    for m in TITLE_CHUNK_RE.finditer(span or ""):
+        s = (m.group(1) or m.group(2) or "").strip()
+        if len(s.split()) >= 1:
+            found.add(s)
+    return list(found)
 
-def _select_extractor_for_award(award: str,
+
+def select_extractor_for_award(award: str,
                                 nominees_by_award: Dict[str, List[str]],
                                 person_extractor=None):
     """
@@ -148,12 +153,15 @@ def _select_extractor_for_award(award: str,
     work-type awards and person-type awards
     """
     if TITLE_AWARD_HINT.search(award):
-        cand = nominees_by_award.get(award, [])
-        return lambda span: _extract_titles_from_span(span, cand)
-    return person_extractor  # if None should pass a fallback
+        losers = { (x or "").lower() for x in nominees_by_award.get(award, []) }
+        def extractor(span: str) -> List[str]:
+            titles = extract_titles_free(span)
+            return [t for t in titles if t.lower() not in losers]
+        return extractor
+    return person_extractor
 
 # Award matching & local alignment
-def _best_award_match(span_text: str,
+def best_award_match(span_text: str,
                       awards: List[str],
                       award_index: Dict[str, set],
                       min_jaccard: float,
@@ -165,7 +173,7 @@ def _best_award_match(span_text: str,
     require ≥ min_anchor anchor tokens to overlap.
     """
     phrase = BEST_PHRASE.search(span_text or "")
-    probe = _normalize_award(phrase.group(0)) if phrase else _normalize_award(span_text or "")
+    probe = normalize_award(phrase.group(0)) if phrase else normalize_award(span_text or "")
     if not probe:
         return None
     probe_set = set(probe.split())
@@ -174,13 +182,13 @@ def _best_award_match(span_text: str,
         anchors = award_index[a]
         if len(probe_set & anchors) < min_anchor:
             continue
-        a_set = set(_normalize_award(a).split())
+        a_set = set(normalize_award(a).split())
         j = len(probe_set & a_set) / max(1, len(probe_set | a_set))
         if j > best_score:
             best, best_score = a, j
     return best if best_score >= min_jaccard else None
 
-def _award_winner_context(text: str,
+def award_winner_context(text: str,
                           awards: List[str],
                           award_index: Dict[str, set],
                           nominees_by_award: Dict[str, List[str]],
@@ -203,29 +211,29 @@ def _award_winner_context(text: str,
     pairs = []
 
     # X wins Y
-    aw = _best_award_match(right_win, awards, award_index, min_jaccard, min_anchor)
+    aw = best_award_match(right_win, awards, award_index, min_jaccard, min_anchor)
     if aw:
-        extractor = _select_extractor_for_award(aw, nominees_by_award, person_extractor) or person_extractor
+        extractor = select_extractor_for_award(aw, nominees_by_award, person_extractor) or person_extractor
         left_cands = (extractor(left_win) or []) if extractor else []
         for c in left_cands:
             if c: pairs.append((aw, c))
     if not aw:
-        aw = _best_award_match(text, awards, award_index, min_jaccard, min_anchor)  # fallback
+        aw = best_award_match(text, awards, award_index, min_jaccard, min_anchor)  # fallback
 
     # Y goes to X
-    aw2 = _best_award_match(left_win, awards, award_index, min_jaccard, min_anchor)
+    aw2 = best_award_match(left_win, awards, award_index, min_jaccard, min_anchor)
     if aw2:
-        extractor = _select_extractor_for_award(aw2, nominees_by_award, person_extractor) or person_extractor
+        extractor = select_extractor_for_award(aw2, nominees_by_award, person_extractor) or person_extractor
         right_cands = (extractor(right_win) or []) if extractor else []
         for c in right_cands:
             if c: pairs.append((aw2, c))
     elif not aw2:
-        _ = _best_award_match(text, awards, award_index, min_jaccard, min_anchor)
+        _ = best_award_match(text, awards, award_index, min_jaccard, min_anchor)
 
     return pairs
 
 #time gate 
-def _compute_time_threshold_ms(tweets: Iterable[dict],
+def compute_time_threshold_ms(tweets: Iterable[dict],
                                trigger_res: List[re.Pattern],
                                pct: float) -> Optional[int]:
     """
@@ -258,7 +266,7 @@ def safe_merge_actors_awards(votes: Dict[Tuple[str, str], int]) -> Dict[Tuple[st
     for (award, person), cnt in votes.items():
         if not award or not person:
             continue
-        merged[(award, _canon_person(person))] += int(cnt)
+        merged[(award, canon_person(person))] += int(cnt)
     return dict(merged)
 
 #Public API
@@ -267,7 +275,7 @@ def identify_winners(tweets: List[dict],
                      nominees_by_award: Dict[str, List[str]],
                      *,
                      person_extractor=None,
-                     strict_nominees: bool = True,
+                     strict_nominees: bool = False,
                      min_jaccard: float = MIN_JACCARD,
                      min_anchor: int = MIN_ANCHOR_OVERLAP,
                      time_pct: Optional[float] = None
@@ -281,10 +289,10 @@ def identify_winners(tweets: List[dict],
     # time bound if needed
     dynamic_start = None
     if TIME_WINDOW is None and time_pct is not None:
-        dynamic_start = _compute_time_threshold_ms(tweets, trigger_res, time_pct)
+        dynamic_start = compute_time_threshold_ms(tweets, trigger_res, time_pct)
 
     # Build index once and whitelist (as-is — award keys must already match)
-    award_index = _build_award_index(award_names)
+    award_index = build_award_index(award_names)
     nom_map = {a: set(noms or []) for a, noms in (nominees_by_award or {}).items()}
     votes = defaultdict(int)
 
@@ -311,7 +319,7 @@ def identify_winners(tweets: List[dict],
                 continue
 
             # local alignment around verb (award and candidate)
-            pairs = _award_winner_context(
+            pairs = award_winner_context(
                 text, award_names, award_index, nominees_by_award,
                 person_extractor, min_jaccard, min_anchor
             )
@@ -331,13 +339,11 @@ def identify_winners(tweets: List[dict],
     # merge near-duplicates (award key preserved and person normalized)
     if votes:
         votes = safe_merge_actors_awards(votes)
-    else:
-        votes = {}
 
     # produce winners and top-k lists per award
     grouped = defaultdict(list)
-    for (award, candidate), vote_count in votes.items():
-        grouped[award].append((candidate, vote_count))
+    for (award, candidate), c in votes.items():
+        grouped[award].append((candidate, c))
 
     winners, topk = {}, {}
     for award, lst in grouped.items():
@@ -347,235 +353,3 @@ def identify_winners(tweets: List[dict],
 
     return dict(votes), winners, topk
 
-
-if __name__ == '__main__':
-    from utils.information_extraction import load_data, extract_person_names
-    
-    print("Loading sample data...")
-    # Load sample data
-    data = load_data('gg2013_preprocessed.jsonl')
-    if not data:
-        print("Error: Could not load data")
-        exit(1)
-    
-    # Sample award names for testing
-    TRUE_AWARDS = [
-        "best screenplay - motion picture",
-        "best director - motion picture",
-        "best performance by an actress in a television series - comedy or musical",
-        "best foreign language film",
-        "best performance by an actor in a supporting role in a motion picture",
-        "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",  # Edge case 3
-        "best motion picture - comedy or musical",
-        "best performance by an actress in a motion picture - comedy or musical",
-        "best mini-series or motion picture made for television",
-        "best original score - motion picture",
-        "best performance by an actress in a television series - drama",
-        "best performance by an actress in a motion picture - drama",
-        "cecil b. demille award",
-        "best performance by an actor in a motion picture - comedy or musical",
-        "best motion picture - drama",
-        "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television",
-        "best performance by an actress in a supporting role in a motion picture",
-        "best television series - drama",
-        "best performance by an actor in a mini-series or motion picture made for television",
-        "best performance by an actress in a mini-series or motion picture made for television",
-        "best animated feature film",
-        "best original song - motion picture",
-        "best performance by an actor in a motion picture - drama",
-        "best television series - comedy or musical",
-        "best performance by an actor in a television series - drama",
-        "best performance by an actor in a television series - comedy or musical"
-    ]
-
-    TRUE_NOMINEES = {
-        "best screenplay - motion picture": [
-            "zero dark thirty",
-            "lincoln",
-            "silver linings playbook",
-            "argo"
-        ],
-        "best director - motion picture": [
-            "kathryn bigelow",
-            "ang lee",
-            "steven spielberg",
-            "quentin tarantino"
-        ],
-        "best performance by an actress in a television series - comedy or musical": [
-            "zooey deschanel",
-            "tina fey",
-            "julia louis-dreyfus",
-            "amy poehler"
-        ],
-        "best foreign language film": [
-            "the intouchables",
-            "kon tiki",
-            "a royal affair",
-            "rust and bone"
-        ],
-        "best performance by an actor in a supporting role in a motion picture": [
-            "alan arkin",
-            "leonardo dicaprio",
-            "philip seymour hoffman",
-            "tommy lee jones"
-        ],
-        "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television": [
-            "hayden panettiere",
-            "archie panjabi",
-            "sarah paulson",
-            "sofia vergara"
-        ],
-        "best motion picture - comedy or musical": [
-            "the best exotic marigold hotel",
-            "moonrise kingdom",
-            "salmon fishing in the yemen",
-            "silver linings playbook"
-        ],
-        "best performance by an actress in a motion picture - comedy or musical": [
-            "emily blunt",
-            "judi dench",
-            "maggie smith",
-            "meryl streep"
-        ],
-        "best mini-series or motion picture made for television": [
-            "the girl",
-            "hatfields & mccoys",
-            "the hour",
-            "political animals"
-        ],
-        "best original score - motion picture": [
-            "argo",
-            "anna karenina",
-            "cloud atlas",
-            "lincoln"
-        ],
-        "best performance by an actress in a television series - drama": [
-            "connie britton",
-            "glenn close",
-            "michelle dockery",
-            "julianna margulies"
-        ],
-        "best performance by an actress in a motion picture - drama": [
-            "marion cotillard",
-            "sally field",
-            "helen mirren",
-            "naomi watts",
-            "rachel weisz"
-        ],
-        "cecil b. demille award": [],
-        "best performance by an actor in a motion picture - comedy or musical": [
-            "jack black",
-            "bradley cooper",
-            "ewan mcgregor",
-            "bill murray"
-        ],
-        "best motion picture - drama": [
-            "django unchained",
-            "life of pi",
-            "lincoln",
-            "zero dark thirty"
-        ],
-        "best performance by an actor in a supporting role in a series, mini-series or motion picture made for television": [
-            "max greenfield",
-            "danny huston",
-            "mandy patinkin",
-            "eric stonestreet"
-        ],
-        "best performance by an actress in a supporting role in a motion picture": [
-            "amy adams",
-            "sally field",
-            "helen hunt",
-            "nicole kidman"
-        ],
-        "best television series - drama": [
-            "boardwalk empire",
-            "breaking bad",
-            "downton abbey (masterpiece)",
-            "the newsroom"
-        ],
-        "best performance by an actor in a mini-series or motion picture made for television": [
-            "benedict cumberbatch",
-            "woody harrelson",
-            "toby jones",
-            "clive owen"
-        ],
-        "best performance by an actress in a mini-series or motion picture made for television": [
-            "nicole kidman",
-            "jessica lange",
-            "sienna miller",
-            "sigourney weaver"
-        ],
-        "best animated feature film": [
-            "frankenweenie",
-            "hotel transylvania",
-            "rise of the guardians",
-            "wreck-it ralph"
-        ],
-        "best original song - motion picture": [
-            "act of valor",
-            "stand up guys",
-            "the hunger games",
-            "les miserables"
-        ],
-        "best performance by an actor in a motion picture - drama": [
-            "richard gere",
-            "john hawkes",
-            "joaquin phoenix",
-            "denzel washington"
-        ],
-        "best television series - comedy or musical": [
-            "the big bang theory",
-            "episodes",
-            "modern family",
-            "smash"
-        ],
-        "best performance by an actor in a television series - drama": [
-            "steve buscemi",
-            "bryan cranston",
-            "jeff daniels",
-            "jon hamm"
-        ],
-        "best performance by an actor in a television series - comedy or musical": [
-            "alec baldwin",
-            "louis c.k.",
-            "matt leblanc",
-            "jim parsons"
-        ]
-    }
-    
-    print(f"Running identify_winners on {len(data)} tweets with {len(TRUE_AWARDS)} awards...")
-    
-    # Call identify_winners
-    votes, winners, topk = identify_winners(
-        tweets=data,
-        award_names=TRUE_AWARDS,
-        nominees_by_award=TRUE_NOMINEES,
-        person_extractor=extract_person_names,
-        strict_nominees=False
-    )
-    
-    print("\n" + "="*60)
-    print("WINNERS (Top candidate per award):")
-    print("="*60)
-    for award, winner in winners.items():
-        print(f"{award}: {winner}")
-    
-    print("\n" + "="*60)
-    print("TOP CANDIDATES (All candidates ranked by votes):")
-    print("="*60)
-    for award, candidates in topk.items():
-        print(f"\n{award}:")
-        for i, (candidate, vote_count) in enumerate(candidates, 1):
-            print(f"  {i}. {candidate} ({vote_count} votes)")
-    
-    print("\n" + "="*60)
-    print("SUMMARY STATISTICS:")
-    print("="*60)
-    print(f"Total awards processed: {len(winners)}")
-    print(f"Votes type: {type(votes)}")
-    print(f"Votes content: {votes}")
-    if isinstance(votes, dict):
-        print(f"Total vote pairs: {len(votes)}")
-    else:
-        print(f"Votes is not a dict, it's: {votes}")
-    print(f"Average candidates per award: {sum(len(candidates) for candidates in topk.values()) / len(topk):.1f}")
