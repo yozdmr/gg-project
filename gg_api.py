@@ -214,6 +214,10 @@ def get_hosts(year):
         - The function should return a list even if there's only one host
     '''
     # Your code here
+    with open(f'gg{year}_extracted.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        hosts = data.get('extracted_hosts', {})
+
     return hosts
 
 def get_awards(year):
@@ -232,6 +236,10 @@ def get_awards(year):
         - Award names should be extracted from tweets, not hardcoded
         - The only hardcoded part allowed is the word "Best"
     '''
+
+    with open(f'gg{year}_extracted.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        awards = data.get('extracted_awards', {}).get("awards", [])
     
     return awards
 
@@ -267,6 +275,14 @@ def get_nominees(year):
         - Each value should be a list of strings, even if there's only one nominee
     '''
     # Your code here
+
+    with open(f'gg{year}_extracted.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        nominees = data.get(
+            'extracted_nominees', 
+            {award: [] for award in AWARD_NAMES}
+        )
+
     return nominees
 
 def get_winner(year):
@@ -290,6 +306,12 @@ def get_winner(year):
         - Each value should be a single string (the winner's name)
     '''
     # Your code here
+
+    with open(f'gg{year}_extracted.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        winners = data['extracted_winners']['winners']
+    
+
     return winners
 
 def get_presenters(year):
@@ -313,6 +335,10 @@ def get_presenters(year):
         - Each value should be a list of strings, even if there's only one presenter
     '''
     # Your code here
+    with open(f'gg{year}_extracted.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        presenters = data.get('extracted_presenters', {})
+    
     return presenters
 
 def pre_ceremony():
@@ -405,12 +431,12 @@ def main():
             "winners": winners,
             "candidate_winners": [elem[0] for award, elems in winner_candidates.items() for elem in (elems[1:] if len(elems) > 1 else [])]
         },
-        "extracted_nominees": {},    # TODO: Implement nominees extraction
+        "extracted_nominees": {award: [] for award in AWARD_NAMES},    # TODO: Implement nominees extraction
         "extracted_presenters": presenters   # TODO: Implement presenters extraction
     }
 
     # Save the output to a file
-    with open('gg2013_extracted.json', 'w', encoding='utf-8') as f:
+    with open(f'gg{YEAR}_extracted.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     return output

@@ -1,23 +1,9 @@
-# patterns for identifying winners of awards
-winning_patterns = [
-    r'\b(?:won|wins|claimed?)\b',
-    r'\bwinner\s+(?:is|are|was|were)\b',
-    r'\bawarded\s+to\b'
-]
-
 # patterns for identifying nominees to awards
 nominated_patterns = [
     r'\bnominated\s+(?:for|to)\b',
     r'\b(nominate|nominee)\b'
     r'\bup\s+for\b',
     r'\bin\s+the\s+running\s+for\b'
-]
-
-# patterns for identifying hosts of awards
-host_patterns = [
-    r'\b(host(?:ed|ing)?(?:\s+by)?|hosts?)\b',
-    r'\b(?:hosted\s+by|host(?:s|ing)?\s+(?:by\s+)?(?:and\s+)?[A-Z][a-z]+)\b',
-    r'\b(?:[A-Z][a-z]+\s+[A-Z][a-z]+\s+(?:and\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+)?host(?:s|ed|ing)?)\b'
 ]
 
 award_patterns = {
@@ -31,5 +17,6 @@ award_patterns = {
     r'\b\ssecures\s\b': 1,
     r'\b\scaptures\s\b': 1,
     r'\b\snominated for\s\b': 1,
-    # r'\b(([A-Z][a-z]*|[A-Z].)\s)+[Aa]ward\b': 0,  # Separate rule!!!
 }
+
+presenters_pattern = r"\b(present|presenter|presented|presenting|introduce|announce)\w*\b"

@@ -7,8 +7,6 @@ from collections import defaultdict
 # load spaCy language model
 nlp = spacy.load("en_core_web_sm")
 
-MONONYMS = {"Cher", "Adele", "Madonna", "Prince", "Seal", "Pink"}
-
 def is_valid_person_name(name, context=""):
     if not name:
         return False
@@ -22,13 +20,14 @@ def is_valid_person_name(name, context=""):
     # tokenize “words” and require at least 2 tokens unless mononym
     # this way we know it's a name
     parts = [p for p in name.split() if re.match(r"^[A-Za-z][A-Za-z\-'’]*$", p)]
-    if len(parts) < 2 and name not in MONONYMS:
-        return False
 
     # capitalization
     for p in parts:
         if not re.match(r"^[A-Z][a-z]+(?:[-'][A-Z][a-z]+)*$", p):
             return False
+    
+    if re.search(r"\d|[@#]", name):
+        return False
 
     return True
 

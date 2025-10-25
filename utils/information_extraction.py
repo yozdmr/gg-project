@@ -4,9 +4,10 @@ import time
 import json
 import difflib
 from collections import defaultdict, Counter
-from utils.helpers.patterns import winning_patterns, host_patterns, award_patterns
+from utils.helpers.patterns import award_patterns, presenters_pattern
 from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, extract_person_names
 from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, extract_best_candidates
+from utils.helpers.presenter_extraction import presenter_extraction_first_pass, presenter_extraction_second_pass
 from utils.winners import identify_winners
 # import spacy
 # nlp = spacy.load("en_core_web_sm")
@@ -22,9 +23,9 @@ STRONG_HOST_RE = re.compile(
     r"co-?hosts?|co-?host(?:ing|ed)?|serving\s+as\s+hosts?"
     r")\b", re.I
 )
-PRES_RE   = re.compile(r"\b(present|presenter|presented|presenting|introduce|announce)\w*\b", re.I)
 FUTURE_RE = re.compile(r"\b(should|would|could|to\s+host|next\s+year|hope|wish|pls|please|let)\b", re.I)
 SENT_SPLIT = re.compile(r"[.!?]+|\n+")
+PRES_RE = re.compile(presenters_pattern, re.I)
 
 def _same_sentence_host_names(text: str):
     """
@@ -372,69 +373,25 @@ def extract_hosts_from_tweets(data, awards):
 
 
 def extract_presenters_from_tweets(data, awards, hosts=None):
-    def normalize(s):
-        s = s.lower()
-        s = re.sub(r'[^a-z0-9\s]', ' ', s)
-        s = re.sub(r'\s+', ' ', s).strip()
-        return s
+    # First pass: Use the more specific presenter extraction logic
+    first_pass = presenter_extraction_first_pass(data, awards, hosts)
 
-    def strip_common_words(s):
-        # Remove common words like "best", "in", "a", "for", "by", and dashes (with or without spaces)
-        s = re.sub(r'\b(best|in|a|for|or|by)\b', '', s, flags=re.IGNORECASE)  # Remove common words
-        s = re.sub(r'\s*-\s*', ' ', s)  # Remove dashes with or without spaces around them
-        return s.strip()
-    
-    WORDS_TO_MATCH_AWARD_SHORT = 3
-    WORDS_TO_MATCH_AWARD_LONG = 5
+    # Second pass: Use the more general presenter extraction logic
+    second_pass = presenter_extraction_second_pass(data, awards, hosts, first_pass)
 
-    norm_awards = {award: normalize(strip_common_words(award)) for award in awards}
-    presenter_scores = {award: defaultdict(float) for award in awards}
-
-    for tweet in data:
-        text = tweet.get('clean_text') or tweet.get('text_no_tags') or tweet.get('text', '')
-        norm_text = normalize(strip_common_words(text))
-
-        # Determine the threshold based on the length of the stripped award name
-        mentioned_awards = []
-        for award, norm_award in norm_awards.items():
-            award_words = len(norm_award.split())
-            threshold = WORDS_TO_MATCH_AWARD_SHORT \
-                                if award_words <= 6 \
-                   else WORDS_TO_MATCH_AWARD_LONG
-            
-            if len(set(norm_award.split()) & set(norm_text.split())) >= threshold:
-                mentioned_awards.append(award)
-
-        if not mentioned_awards:
-            continue
-
-        # Check for presenter-related cues
-        if PRES_RE.search(text):
-            names = extract_person_names(text, context_text=text)  # Extract all names
-            if not names:
-                continue
-            boost = 1.0 + (0.4 if tweet.get('is_retweet') else 0.0)
-
-            # Exclude names that are in the list of hosts
-            if hosts:
-                names = [name for name in names if name not in hosts]
-
-            for award in mentioned_awards:
-                for name in set(names):
-                    presenter_scores[award][name] += boost
-
-    return {
-        award: [n for n, _ in sorted(scores.items(), key=lambda x: -x[1])[:3]]
-        for award, scores in presenter_scores.items()
-    }
+    # Combine results from both passes
+    combined_results = {**first_pass, **second_pass}
+    return combined_results
 
 
 def process_tweets(data, ground_truth_awards, ground_truth_nominees=None):
     print("Extracting awards...")
-    awards = []  # extract_awards_from_tweets(data)
+    awards = extract_awards_from_tweets(data)
+    # awards = []
 
     print("Extracting winners...")
-    winners, winner_candidates = ([], {"":([])})  # extract_winners_from_tweets(data, ground_truth_awards, ground_truth_nominees)
+    winners, winner_candidates = extract_winners_from_tweets(data, ground_truth_awards, ground_truth_nominees)
+    # winners, winner_candidates = ([], {"":([])})
 
     print("Extracting hosts...")
     hosts =  extract_hosts_from_tweets(data, ground_truth_awards)
