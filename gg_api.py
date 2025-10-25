@@ -20,7 +20,7 @@ AWARD_NAMES = [
     "best performance by an actress in a television series - comedy or musical",
     "best foreign language film",
     "best performance by an actor in a supporting role in a motion picture",
-    "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",  # Edge case 3
+    "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television",
     "best motion picture - comedy or musical",
     "best performance by an actress in a motion picture - comedy or musical",
     "best mini-series or motion picture made for television",
@@ -375,11 +375,11 @@ def main():
     '''
     print("Starting Golden Globes 2013 Analysis...")
     
-    # Run pre-ceremony setup
-    pre_ceremony()
-    
     # Extract awards
     print("\nExtracting information...")
+
+    # Run pre-ceremony setup
+    pre_ceremony()
 
     # Load the preprocessed data
     data_file = 'gg2013_preprocessed.jsonl'
@@ -390,7 +390,8 @@ def main():
         return []
     
     # Process tweets to extract awards, winners, and hosts
-    winner_data, hosts, awards = process_tweets(gg_data)
+    winner_data, hosts, awards, presenters = process_tweets(gg_data, \
+                                                ground_truth_awards=AWARD_NAMES, ground_truth_nominees=NOMINEES)
     winners, winner_candidates = winner_data
 
 
@@ -405,7 +406,7 @@ def main():
             "candidate_winners": [elem[0] for award, elems in winner_candidates.items() for elem in (elems[1:] if len(elems) > 1 else [])]
         },
         "extracted_nominees": {},    # TODO: Implement nominees extraction
-        "extracted_presenters": {}   # TODO: Implement presenters extraction
+        "extracted_presenters": presenters   # TODO: Implement presenters extraction
     }
 
     # Save the output to a file
