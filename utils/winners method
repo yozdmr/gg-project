@@ -1,18 +1,27 @@
-# Winner identification gives:
-#   tweets: preprocessed records with fields like qt_text / rt_text / clean_text / text_no_tags / lang / lang_conf / timestamp_ms
-#   award_names: official award strings to predict 
-#   nominees_by_award: {award -> [nominees]}
-#
-# Approach:
-#   1) language/time gate.
-#   2) For each tweet, prefer factual-looking sentences (like "wins / goes to / is awarded to"). Use local windows around the verb to align award and candidate.
-#   3) Award alignment: "X wins Y" vs "Y goes to X":
-#      Match award names via token Jaccard + anchor tokens (e.g., drama/actor/television).
-#   4) Candidate extraction:
-#      work-type awards (Picture/Film/Series/Song/Score…): substring match against nominees
-#      type awards
-#   5) Vote per (award, candidate), de-duplicate per tweet, merge near duplicates.
-#
-# Notes:
-#    it is driven by award_names + nominees_by_award + thresholds.
+Input files
+(it is driven by award_names + nominees_by_award + thresholds)
+1.gg2013_preprocessed.jsonl fields like qt_text/rt_text/clean_text/text_no_tags/lang/lang_conf/timestamp_ms/is_quote/is_retweet.
+2.awards_2013.txt (one official award name per line).
+3.nominees_2013.json ({award: [nominees]}),!!! no winners inside!!!
 
+i run the codes with the parameter below and gets 95% accuracy:
+  --tweets ./gg2013_preprocessed.jsonl \
+  --awards ./awards_2013.txt \
+  --nominees ./nominees_2013.json \
+  --out ./outputs/2013.results.json \
+  --fast-person --langs "en,unk" \
+  --min-anchor 2 --min-jaccard 0.35 --time-pct 0.7
+votes, winners_map, topk = identify_winners(
+    tweets, awards, nominees_by_award,
+    person_extractor=None,          
+    strict_nominees=False,          
+    min_jaccard=0.35,             
+    min_anchor=2,                
+    time_pct=0.7                   
+)
+from winners import identify_winners → returns (votes, winners, topk)
+
+Key params:
+--fast-person (regex NER), --langs, --min-anchor, --min-jaccard, --time-pct. strict_nominees=False as our nominees don’t contain winners
+
+Normalize title winners to the official nominees spelling before writing final JSON (map hashtag/concat variants to the longest matching nominee).
