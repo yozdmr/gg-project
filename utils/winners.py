@@ -41,30 +41,59 @@ WIN_TRIGGERS = [
     r"\b(award|globe)s?\s+(?:goes|went)\s+to\b",
     r"\b(?:is|was)\s+awarded\s+to\b",
     r"\b(?:goes|went)\s+to\b",
+    r"\b(receives?|received|accepts?|accepted|honored\s+with)\b",
 ]
+
+SOCIAL_PREFIX_RE = re.compile(
+    r"^(?:RT\s+@?[\w_]+:\s*|via\s+@?[\w_]+:?\s*|@?[\w_]+:\s*)",
+    re.IGNORECASE
+)
 
 # exclude non-factual / predictive / meta speech (hope/should/if wins/etc.)
 NON_FACTUAL_RE = re.compile(
- r"\b(hope|should|deserve[sd]?|wish|predict(?:ion|s)?|guess|"
- r"if\s+\w+\s+wins?|wins?\s+if|"
- r"nominee|nominated|noms?|present(?:ed|ing|s)|host(?:ed|ing|s))\b",
- re.IGNORECASE,
+    r"\b(hope|should|deserve[sd]?|wish|predict(?:ion|s)?|guess|"
+    r"if\s+\w+\s+wins?|wins?\s+if|"
+    r"nominee|nominated|noms?|present(?:ed|ing|s)|presenter(?:s)?|host(?:ed|ing|s))\b",
+    re.IGNORECASE,
 )
 
 # verb use for "X wins Y" / "Y goes to X" local windows
 WIN_VERB = re.compile(
-    r"\b(wins?|won|takes?|took|gets?|got|earns?|earned|secures?|secured|snags?|bag(?:s|ged)|picks?\s+up|(?:goes|went)\s+to|is\s+awarded\s+to)\b",
+    r"\b(wins?|won|takes?|took|gets?|got|earns?|earned|secures?|secured|snags?|bag(?:s|ged)|picks?\s+up|(?:goes|went)\s+to|is\s+awarded\s+to|receives?|received|accepts?|accepted|honored\s+with)\b",
     re.IGNORECASE,
 )
 
 # "Best …" phrase helps award matching
-BEST_PHRASE = re.compile(r"\bBest\s+[A-Za-z][A-Za-z\s\-\&/]+", re.IGNORECASE)
+BEST_PHRASE = re.compile(r"\bBest\s+[A-Za-z][A-Za-z\s\-&/]+", re.IGNORECASE)
+
+PERSON_TOKENS_RE = re.compile(r"\b(actor|actress|performance|director)\b", re.IGNORECASE)
+WORK_TOKENS_RE = re.compile(
+    r"\b(picture|film|series|television|tv|song|score|screenplay|animated|foreign)\b",
+    re.IGNORECASE
+)
+
+GLOBES_TAG_RE = re.compile(r"@?golden[\s_\-]*globes?[:\-]?$", re.IGNORECASE)
 
 # heuristic to decide which awards represent "works/titles" (film/series/song/score…)
-TITLE_AWARD_HINT = re.compile(
-    r"\b(Picture|Film|Series|Television|TV|Song|Score|Screenplay|Animated|Foreign)\b",
-    re.IGNORECASE,
+TITLE_AWARD_STOP = {
+    "golden","globe","globes","award","awards","hollywood","foreign","press","red","carpet","tonight","live",
+    "best","original","song","score","motion","picture","television","tv","series","drama","comedy","musical",
+    "disney","pixar","dreamworks","warner","universal","paramount","weinstein","fox","hbo","showtime","nbc","abc","cbs","bbc",
+    "rt","via"   
+}
+
+LEADING_NOISE_RE = re.compile(r"^(?:r|rt|and|with|for|to|by|the|sir|dame)\s+", re.IGNORECASE)
+
+TITLE_CHUNK_RE = re.compile(
+    r"\"([^\"]{2,80})\"|((?:[A-ZÀ-ÖØ-Ý][\w'’&\-:]+)(?:\s+(?:[A-ZÀ-ÖØ-Ý][\w'’&\-:]+)){0,5})"
 )
+
+def is_person_award(award: str) -> bool:
+    return PERSON_TOKENS_RE.search(award or "") is not None
+
+def is_title_award(award: str) -> bool:
+    # work/type awards if they mention film/series/song/score… and do not mention actor/actress/performance
+    return WORK_TOKENS_RE.search(award or "") is not None and not is_person_award(award)
 
 # Normalization & utilities
 def normalize_award(s: str) -> str:
@@ -72,7 +101,7 @@ def normalize_award(s: str) -> str:
     s = (s or "").lower().replace("&", "and")
     s = re.sub(r"\bmini[-\s]*series\b", "miniseries", s)
     s = re.sub(r"\btv\b", "television", s)
-    s = re.sub(r"[^a-z0-9\s-]", " ", s)  # keep hyphen
+    s = re.sub(r"[^a-z0-9\s-]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 def award_anchors(name: str) -> set:
@@ -85,15 +114,30 @@ def build_award_index(awards: List[str]) -> Dict[str, set]:
     return {a: award_anchors(a) for a in awards}
 
 def canon_person(s: str) -> str:
-    """Normalize person names for merging (Title Case, drop mentions/punct)."""
-    s = re.sub(r"[@#]\w+", " ", s or "")
-    s = re.sub(r"[^A-Za-z\s\.]", " ", s)
+    s = re.sub(r"[@#]\\w+", " ", s or "")
+    s = re.sub(r"[^A-Za-z\\s\\.\\-]", " ", s)   # keep hyphen
     s = s.replace(".", " ")
-    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\\s+", " ", s).strip()
     return s.title()
 
+def clean_person_candidate(s: str) -> str:
+    s = (s or "").strip()
+    s = LEADING_NOISE_RE.sub("", s)
+    s = re.sub(r"\\s+", " ", s).strip()
+    if len(s.split()) < 2:
+        return ""
+    return s
+
+def extract_titles_free(span: str) -> List[str]:
+    found = set()
+    for m in TITLE_CHUNK_RE.finditer(span or ""):
+        s = (m.group(1) or m.group(2) or "").strip()
+        if len(s) >= 1:
+            found.add(s)
+    return list(found)
+
+#language/time gates
 def lang_ok(tw: dict) -> bool:
-    """Fast language gate using preprocessed fields."""
     lang = tw.get("lang")
     conf = float(tw.get("lang_conf", 0))
     if lang in ALLOWED_LANGS:
@@ -101,7 +145,6 @@ def lang_ok(tw: dict) -> bool:
     return False
 
 def in_time_window(tw: dict) -> bool:
-    """Apply a fixed time window gate if provided."""
     if not TIME_WINDOW:
         return True
     try:
@@ -112,14 +155,6 @@ def in_time_window(tw: dict) -> bool:
     return s <= t <= e
 
 def pick_text_candidates(tweet: dict) -> List[Tuple[str, int]]:
-    """
-    Return candidate (text, weight) in order:
-      1) qt_text (quoted original, most factual)
-      2) rt_text (retweeted original)
-      3) clean_text
-      4) text_no_tags
-    Each added at most once per tweet using a de-duplicate.
-    """
     cands, seen = [], set()
     if tweet.get("is_quote") and tweet.get("qt_text"):
         t = tweet["qt_text"].strip()
@@ -133,74 +168,136 @@ def pick_text_candidates(tweet: dict) -> List[Tuple[str, int]]:
     if t and t not in seen: cands.append((t, WEIGHT_RAW)); seen.add(t)
     return cands
 
-TITLE_CHUNK_RE = re.compile(
-    r'"([^"]{2,80})"|((?:[A-Z][a-z0-9\'&\-\:]+)(?:\s+(?:[A-Z][a-z0-9\'&\-\:]+)){0,5})'
-)
-def extract_titles_free(span: str) -> List[str]:
-    found = set()
-    for m in TITLE_CHUNK_RE.finditer(span or ""):
-        s = (m.group(1) or m.group(2) or "").strip()
-        if len(s.split()) >= 1:
-            found.add(s)
-    return list(found)
-
+# extractor selection
+def wrap_person_extractor(person_extractor):
+    if not person_extractor:
+        return None
+    def _extract(span: str) -> List[str]:
+        names = person_extractor(span) or []
+        cleaned = []
+        for n in names:
+            nn = clean_person_candidate(n)
+            if nn:
+                cleaned.append(nn)
+        return cleaned
+    return _extract
 
 def select_extractor_for_award(award: str,
-                                nominees_by_award: Dict[str, List[str]],
-                                person_extractor=None):
-    """
-    Choose the appropriate extractor:
-    work-type awards and person-type awards
-    """
-    if TITLE_AWARD_HINT.search(award):
-        losers = { (x or "").lower() for x in nominees_by_award.get(award, []) }
+                               nominees_by_award: Dict[str, List[str]],
+                               person_extractor=None):
+    if is_title_award(award):
+        losers = {(x or "").strip().lower() for x in nominees_by_award.get(award, [])}
         def extractor(span: str) -> List[str]:
             titles = extract_titles_free(span)
-            return [t for t in titles if t.lower() not in losers]
+            # also collect persons to filter out
+            person_set = set()
+            if person_extractor:
+                try:
+                    person_set = {canon_person(p).lower() for p in (person_extractor(span) or [])}
+                except Exception:
+                    person_set = set()
+            results = []
+            for t in titles:
+                tl = (t or "").strip()
+                tl = SOCIAL_PREFIX_RE.sub("", tl)
+                tll = tl.lower()
+                if tll in ("rt","via"):   
+                    continue
+                if GLOBES_TAG_RE.search(tl) or "goldenglobes" in tll:
+                    continue
+                if not tl:
+                    continue
+                # drop obvious garbage and award words
+                if tll in TITLE_AWARD_STOP:
+                    continue
+                if tll in losers:
+                    continue
+                # drop if looks like award fragment
+                if re.search(r"\b(best|actor|actress|performance|award|globe|globes|golden)\b", tl, re.IGNORECASE):
+                    continue
+                if ":" in tl and re.search(r"\b(red|carpet|live|^e$)\b", tl.lower()):
+                    continue
+                # filter out person-looking strings via extractor
+                can_tl = canon_person(tl).lower()
+                if any(p and (p in can_tl or can_tl in p) for p in person_set):
+                    continue
+                results.append(tl)
+            return results
         return extractor
-    return person_extractor
+    # person awards
+    TO_NAME_RE = re.compile(
+    r"\b(?:to|goes\s+to|awarded\s+to|honored\s+with)\s+([A-Z][\w'\-]+(?:\s+[A-Z][\w'\-]+){0,3})",
+    re.IGNORECASE) 
+    RECV_NAME_RE = re.compile(
+    r"\b(?:receives?|received|accepts?|accepted)\s+([A-Z][\w'\-]+(?:\s+[A-Z][\w'\-]+){0,3})",
+    re.IGNORECASE)
+    PRESENTER_NEAR_RE = re.compile(r"\b(present(?:ed|ing|s)|presenter(?:s)?|introduc\w+|host(?:ed|ing|s))\b", re.IGNORECASE)
+    def extractor(span: str) -> list[str]:
+        for pat in (TO_NAME_RE, RECV_NAME_RE):
+            m = pat.search(span or "")
+            if m:
+                nn = clean_person_candidate(m.group(1))
+                if nn: return [nn]
+        if not person_extractor:
+            return []
+        names = person_extractor(span) or []
+        out = []
+        for n in names:
+            nn = clean_person_candidate(n)
+            if not nn:
+                continue
+            if PRESENTER_NEAR_RE.search(span):
+                if re.search(rf"\b{re.escape(nn)}\b\s+(?:presents?|presenting|presenter|introduc\w+)", span, re.IGNORECASE):
+                    continue
+                if re.search(r"(?:presented|introduced)\s+by\s+" + re.escape(nn), span, re.IGNORECASE):
+                    continue
+            out.append(nn)
+        return out
+    return extractor
 
-# Award matching & local alignment
+
+# award matching
 def best_award_match(span_text: str,
-                      awards: List[str],
-                      award_index: Dict[str, set],
-                      min_jaccard: float,
-                      min_anchor: int) -> Optional[str]:
-    """
-    Map to an official award name:
-    extract "Best …" phrase if present else use entire span
-    token Jaccard vs normalized awards
-    require ≥ min_anchor anchor tokens to overlap.
-    """
+                     awards: List[str],
+                     award_index: Dict[str, set],
+                     min_jaccard: float,
+                     min_anchor: int) -> Optional[str]:
     phrase = BEST_PHRASE.search(span_text or "")
     probe = normalize_award(phrase.group(0)) if phrase else normalize_award(span_text or "")
     if not probe:
         return None
     probe_set = set(probe.split())
-    best, best_score = None, 0
+    best, best_score = None, 0.0
     for a in awards:
         anchors = award_index[a]
+        a_norm_set = set(normalize_award(a).split())
+        if "supporting" in a_norm_set and "supporting" not in probe_set:
+            continue
+        if "drama" in a_norm_set and "drama" not in probe_set:
+            continue
+        if ("comedy" in a_norm_set or "musical" in a_norm_set) and (("comedy" not in probe_set) and ("musical" not in probe_set)):
+            continue
+        if ("television" in a_norm_set or "series" in a_norm_set) and ("television" not in probe_set and "series" not in probe_set
+):
+            continue
         if len(probe_set & anchors) < min_anchor:
             continue
-        a_set = set(normalize_award(a).split())
+        if "miniseries" in a_norm_set:
+            if not ("miniseries" in probe_set or ("television" in probe_set and "movie" in probe_set)):
+                continue
+        a_set = a_norm_set
         j = len(probe_set & a_set) / max(1, len(probe_set | a_set))
         if j > best_score:
             best, best_score = a, j
     return best if best_score >= min_jaccard else None
 
 def award_winner_context(text: str,
-                          awards: List[str],
-                          award_index: Dict[str, set],
-                          nominees_by_award: Dict[str, List[str]],
-                          person_extractor,
-                          min_jaccard: float,
-                          min_anchor: int):
-    """
-    Given a tweet with a winning verb, then align (award, candidate) pairs by:
-    "X wins Y"  : award on RIGHT, candidates on LEFT
-    "Y goes to X": award on LEFT, candidates on RIGHT
-    Fallback: try full text if local windows do not match an award.
-    """
+                         awards: List[str],
+                         award_index: Dict[str, set],
+                         nominees_by_award: Dict[str, List[str]],
+                         person_extractor,
+                         min_jaccard: float,
+                         min_anchor: int):
     m = WIN_VERB.search(text or "")
     if not m:
         return []
@@ -213,17 +310,21 @@ def award_winner_context(text: str,
     # X wins Y
     aw = best_award_match(right_win, awards, award_index, min_jaccard, min_anchor)
     if aw:
-        extractor = select_extractor_for_award(aw, nominees_by_award, person_extractor) or person_extractor
+        extractor = select_extractor_for_award(aw, nominees_by_award, person_extractor)
         left_cands = (extractor(left_win) or []) if extractor else []
         for c in left_cands:
             if c: pairs.append((aw, c))
+        if extractor and is_title_award(aw):
+            right_extra = (extractor(right_win) or [])
+            for c in right_extra:
+                if c: pairs.append((aw, c))
     if not aw:
         aw = best_award_match(text, awards, award_index, min_jaccard, min_anchor)  # fallback
 
     # Y goes to X
     aw2 = best_award_match(left_win, awards, award_index, min_jaccard, min_anchor)
     if aw2:
-        extractor = select_extractor_for_award(aw2, nominees_by_award, person_extractor) or person_extractor
+        extractor = select_extractor_for_award(aw2, nominees_by_award, person_extractor)
         right_cands = (extractor(right_win) or []) if extractor else []
         for c in right_cands:
             if c: pairs.append((aw2, c))
@@ -232,14 +333,10 @@ def award_winner_context(text: str,
 
     return pairs
 
-#time gate 
+#  time threshold 
 def compute_time_threshold_ms(tweets: Iterable[dict],
-                               trigger_res: List[re.Pattern],
-                               pct: float) -> Optional[int]:
-    """
-    this is a lower time threshold (ms) so that only tweets at/after the
-    `pct` quantile among trigger-containing tweets are kept.
-    """
+                              trigger_res: List[re.Pattern],
+                              pct: float) -> Optional[int]:
     ts = []
     for tw in tweets:
         txt = (tw.get("clean_text") or tw.get("text_no_tags") or tw.get("text") or "").strip()
@@ -254,22 +351,19 @@ def compute_time_threshold_ms(tweets: Iterable[dict],
     k = max(0, min(len(ts) - 1, int(len(ts) * pct)))
     return ts[k]
 
-# Merge & finalize
+#merge & finalize 
 def safe_merge_actors_awards(votes: Dict[Tuple[str, str], int]) -> Dict[Tuple[str, str], int]:
-    """
-    Merge near-duplicates:
-    keep award keys must match official naming upstream
-    normalize person names (Title Case, punctuation removed)
-    do not normalize work titles (preserve nominee spellings).
-    """
     merged: Dict[Tuple[str, str], int] = defaultdict(int)
-    for (award, person), cnt in votes.items():
-        if not award or not person:
+    for (award, cand), cnt in votes.items():
+        if not award or not cand:
             continue
-        merged[(award, canon_person(person))] += int(cnt)
+        if is_title_award(award):
+            key = (award, (cand or "").strip())
+        else:
+            key = (award, canon_person(cand))
+        merged[key] += int(cnt)
     return dict(merged)
 
-#Public API
 def identify_winners(tweets: List[dict],
                      award_names: List[str],
                      nominees_by_award: Dict[str, List[str]],
@@ -280,24 +374,19 @@ def identify_winners(tweets: List[dict],
                      min_anchor: int = MIN_ANCHOR_OVERLAP,
                      time_pct: Optional[float] = None
                      ) -> tuple[Dict[tuple, int], Dict[str, str], Dict[str, List[tuple]]]:
-    """
-    Identify winners for the given awards.
-    """
-    # Pre-compile triggers
+    # triggers
     trigger_res = [re.compile(p, re.IGNORECASE) for p in WIN_TRIGGERS]
 
-    # time bound if needed
+    # dynamic start time
     dynamic_start = None
     if TIME_WINDOW is None and time_pct is not None:
         dynamic_start = compute_time_threshold_ms(tweets, trigger_res, time_pct)
 
-    # Build index once and whitelist (as-is — award keys must already match)
     award_index = build_award_index(award_names)
-    nom_map = {a: set(noms or []) for a, noms in (nominees_by_award or {}).items()}
+    nom_map = {a: {(n or "").strip().lower() for n in (noms or [])} for a, noms in (nominees_by_award or {}).items()}
     votes = defaultdict(int)
 
     for tw in tweets:
-        # language and time gates 
         if not lang_ok(tw):
             continue
         if dynamic_start is not None:
@@ -309,38 +398,34 @@ def identify_winners(tweets: List[dict],
         if not in_time_window(tw):
             continue
 
-        # aggregate candidate texts (qt/rt/clean/no_tag) and de-duplicate per tweet
         per_tweet_seen = set()
         for text, weight in pick_text_candidates(tw):
             if not text or NON_FACTUAL_RE.search(text):
                 continue
-            # verb trigger gate
             if not any(p.search(text) for p in trigger_res):
                 continue
 
-            # local alignment around verb (award and candidate)
             pairs = award_winner_context(
                 text, award_names, award_index, nominees_by_award,
                 person_extractor, min_jaccard, min_anchor
             )
 
-            # vote and whitelist filtering
             for award, candidate in pairs:
                 if not award or not candidate:
                     continue
-                if strict_nominees and award in nom_map and nom_map[award] and candidate not in nom_map[award]:
+
+                if strict_nominees and award in nom_map and nom_map[award] and candidate.strip().lower() not in nom_map[award]:
                     continue
+
                 key = (award, candidate)
                 if key in per_tweet_seen:
                     continue
                 per_tweet_seen.add(key)
                 votes[key] += weight
 
-    # merge near-duplicates (award key preserved and person normalized)
     if votes:
         votes = safe_merge_actors_awards(votes)
 
-    # produce winners and top-k lists per award
     grouped = defaultdict(list)
     for (award, candidate), c in votes.items():
         grouped[award].append((candidate, c))
@@ -352,4 +437,6 @@ def identify_winners(tweets: List[dict],
         winners[award] = lst_sorted[0][0]
 
     return dict(votes), winners, topk
+
+
 
