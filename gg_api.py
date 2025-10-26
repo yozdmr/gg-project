@@ -426,11 +426,11 @@ def main():
         },
         "extracted_hosts": list(hosts.keys()) if isinstance(hosts, dict) else (hosts if isinstance(hosts, list) else [hosts]),
         "extracted_winners": {
-            "winners": winners,
-            "candidate_winners": [elem[0] for award, elems in winner_candidates.items() for elem in (elems[1:] if len(elems) > 1 else [])]
+            "winners": winners
+            # "candidate_winners": [elem[0] for award, elems in winner_candidates.items() for elem in (elems[1:] if len(elems) > 1 else [])]
         },
         "extracted_nominees": nominees,
-        "extracted_presenters": presenters   # TODO: Implement presenters extraction
+        "extracted_presenters": presenters
     }
 
     # Save the output to a file
