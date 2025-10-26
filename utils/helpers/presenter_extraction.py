@@ -1,9 +1,8 @@
 import re
 from collections import defaultdict
-from utils.helpers.text_matching import extract_person_names
+from utils.helpers.text_matching import extract_person_names, merge_similar_entries
 from utils.helpers.patterns import presenters_pattern
 import spacy
-import json
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -154,8 +153,11 @@ def presenter_extraction_second_pass(data, awards, hosts, first_pass_results):
         for name in first_pass_results.get(award, []):
             combined_scores[name] += 1.0
 
+        # Merge similar names
+        merged_scores = merge_similar_entries(combined_scores)
+
         # rank presenters per award
-        ranked = sorted(combined_scores.items(), key=lambda x: -x[1])
+        ranked = sorted(merged_scores.items(), key=lambda x: -x[1])
         combined[award] = [n for n, _ in ranked[:3]]
 
     return combined

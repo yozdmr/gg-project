@@ -121,9 +121,8 @@ def extract_awards(tweets:list):
 
 
 
-
+# Decide if two names should be merged based on substring or similarity
 def _should_merge(a: str, b: str, similarity_thresh: float = 0.85):
-    """Decide if two names should be merged based on substring or similarity."""
     if a.lower() in b.lower().split() or b.lower() in a.lower().split():
         return True, 1  # substring match
     if SequenceMatcher(None, a.lower(), b.lower()).ratio() > similarity_thresh:
@@ -166,44 +165,4 @@ def merge_similar_entries(counts):
         
         merged_counts[canonical_name] = total_count
     
-    return dict(merged_counts)
-
-
-def merge_similar_actors_awards(counts):
-    merged_counts = defaultdict(int)
-    processed = set()
-
-    sorted_names = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-    for pair, count in sorted_names:
-        award, name = pair[0], pair[1]
-
-        if pair in processed:
-            continue
-        processed.add(pair)
-
-        canonical_name = name
-        total_count = count
-
-        for other_pair, other_count in sorted_names:
-            other_award, other_name = other_pair[0], other_pair[1]
-
-            if other_pair in processed:
-                continue
-
-            should_merge_name, case = _should_merge(name, other_name)
-            should_merge_award, _ = _should_merge(award, other_award, similarity_thresh=0.8)
-            
-            if should_merge_name:
-                if case == 1 and len(other_name) > len(canonical_name):
-                        canonical_name = other_name
-                elif case == 2 and other_count > count:
-                        canonical_name = other_name
-                total_count += other_count
-                processed.add(other_pair)
-            
-            if should_merge_award or award in other_award or other_award in award:
-                canonical_award = other_award if len(other_award) > len(award) else award
-            
-        merged_counts[(canonical_award, canonical_name)] = total_count
-
     return dict(merged_counts)

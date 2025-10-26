@@ -5,7 +5,7 @@ import json
 import difflib
 from collections import defaultdict, Counter
 from utils.helpers.patterns import award_patterns, presenters_pattern
-from utils.helpers.text_matching import merge_similar_entries, merge_similar_actors_awards, extract_person_names
+from utils.helpers.text_matching import merge_similar_entries, extract_person_names
 from utils.helpers.award_merging import merge_normalized, calculate_tweet_weight, extract_best_candidates
 from utils.helpers.presenter_extraction import presenter_extraction_first_pass, presenter_extraction_second_pass
 from utils.winners import identify_winners
@@ -125,29 +125,6 @@ def load_data(filepath):
 
 
 ### DATA PROCESSING FUNCTIONS ###
-def find_matches(data, patterns, extract_function, context=None, context_function=None):
-    matches = defaultdict(int)
-    for tweet in data:
-        # choose cleanest text
-        tweet_text = tweet.get('clean_text') or tweet.get('text_no_tags') or tweet.get('text', '')
-
-        # check if tweet contains any keyword pattern
-        has_pattern_context = any(re.search(pattern, tweet_text, re.IGNORECASE) for pattern in patterns)
-        if not has_pattern_context:
-            continue
-
-        # apply context function if given
-        extracted = context_function(tweet_text, context, extract_function) \
-        if context else extract_function(tweet_text)
-        for item in extracted:
-            matches[item] += 1
-
-    # merge
-    if all(isinstance(k, tuple) for k in matches):
-        return merge_similar_actors_awards(matches)
-    return merge_similar_entries(matches)
-
-
 
 def extract_awards_from_tweets(data):
 

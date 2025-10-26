@@ -279,10 +279,7 @@ def get_nominees(year):
 
     with open(f'gg{year}_extracted.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
-        nominees = data.get(
-            'extracted_nominees', 
-            {award: [] for award in AWARD_NAMES}
-        )
+        nominees = data["extracted_nominees"]  # {award: [] for award in AWARD_NAMES}
 
     return nominees
 

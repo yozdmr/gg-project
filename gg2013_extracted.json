@@ -607,12 +607,11 @@
   },
   "extracted_presenters": {
     "best screenplay - motion picture": [
-      "Amanda Seyfried",
-      "Robert Pattinson"
+      "Robert Pattinson",
+      "Amanda Seyfried"
     ],
     "best director - motion picture": [
       "Ben Affleck",
-      "Ben",
       "George Clooney"
     ],
     "best performance by an actress in a television series - comedy or musical": [
@@ -627,7 +626,7 @@
     "best performance by an actor in a supporting role in a motion picture": [
       "Anne Hathaway",
       "Christoph Waltz",
-      "Django Unchained"
+      "Daniel Day Lewis"
     ],
     "best performance by an actress in a supporting role in a series, mini-series or motion picture made for television": [
       "Anne Hathaway",
@@ -637,7 +636,7 @@
     "best motion picture - comedy or musical": [
       "Hugh Jackman",
       "Jennifer Lawrence",
-      "Will Ferrell"
+      "Kristen Wiig"
     ],
     "best performance by an actress in a motion picture - comedy or musical": [
       "Anne Hathaway",
@@ -694,8 +693,8 @@
     ],
     "best performance by an actor in a mini-series or motion picture made for television": [
       "Christoph Waltz",
-      "Julianne Moore",
-      "Ed Harris"
+      "Daniel Day Lewis",
+      "Julianne Moore"
     ],
     "best performance by an actress in a mini-series or motion picture made for television": [
       "Anne Hathaway",
@@ -717,18 +716,18 @@
       "Drama"
     ],
     "best television series - comedy or musical": [
-      "Jay Leno",
-      "Jimmy Fallon"
+      "Jimmy Fallon",
+      "Jay Leno"
     ],
     "best performance by an actor in a television series - drama": [
       "Daniel Day-Lewis",
-      "Daniel Day Lewis",
+      "Lewis Lincoln",
       "Abraham"
     ],
     "best performance by an actor in a television series - comedy or musical": [
       "Hugh Jackman",
       "Jennifer Lawrence",
-      "Will Ferrell"
+      "Kristen Wiig"
     ]
   }
 }
