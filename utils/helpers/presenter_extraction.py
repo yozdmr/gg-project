@@ -73,9 +73,7 @@ def presenter_extraction_first_pass(data, awards, hosts):
         for award, scores in presenter_scores.items()
     }
 
-
-
-from rapidfuzz import fuzz
+from difflib import SequenceMatcher
 
 PRES_RE_BROAD = re.compile(
     r"\b(present|presenter|presented|presenting|introduce|announce|give|hand|award|"
@@ -101,7 +99,8 @@ def presenter_extraction_second_pass(data, awards, hosts, first_pass_results):
             return True
 
         # fallback fuzzy match only for nearly exact wording
-        return fuzz.partial_ratio(norm_award, norm_text) > fuzzy_threshold
+        similarity = SequenceMatcher(None, norm_award, norm_text).ratio()
+        return similarity > (fuzzy_threshold / 100.0)
 
 
 
