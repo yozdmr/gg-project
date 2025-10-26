@@ -1,4 +1,5 @@
 '''Version 0.5'''
+from utils.information_extraction import load_data, process_tweets
 import os
 import json
 
@@ -416,7 +417,7 @@ def main():
         return []
     
     # Process tweets to extract awards, winners, and hosts
-    winner_data, hosts, awards, presenters = process_tweets(gg_data, \
+    winner_data, hosts, awards, presenters, nominees = process_tweets(gg_data, \
                                                 ground_truth_awards=AWARD_NAMES, ground_truth_nominees=NOMINEES)
     winners, winner_candidates = winner_data
 
@@ -431,7 +432,7 @@ def main():
             "winners": winners,
             "candidate_winners": [elem[0] for award, elems in winner_candidates.items() for elem in (elems[1:] if len(elems) > 1 else [])]
         },
-        "extracted_nominees": {award: [] for award in AWARD_NAMES},    # TODO: Implement nominees extraction
+        "extracted_nominees": nominees,
         "extracted_presenters": presenters   # TODO: Implement presenters extraction
     }
 

@@ -26,6 +26,19 @@ STRONG_HOST_RE = re.compile(
 FUTURE_RE = re.compile(r"\b(should|would|could|to\s+host|next\s+year|hope|wish|pls|please|let)\b", re.I)
 SENT_SPLIT = re.compile(r"[.!?]+|\n+")
 PRES_RE = re.compile(presenters_pattern, re.I)
+QUOTED_TITLE_RE = re.compile(r"[“”\"']([^\"“”']{2,})[“”\"']")
+TITLE_CASE_SEQ_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,})\b")
+NOM_CUE_RE = re.compile(
+    r"\b("
+    r"nominee?s?|nominations?|noms?|contenders?|shortlist|line[-\s]?up|field|the\s+list|"
+    r"include?s?|featuring|among|vs\.?|versus|competing|in\s+contention|"
+    r"(?:is|are)\s+nominated\s+for|nominated\s+for|are\s+up\s+for|are\s+in\s+the\s+running\s+for|"
+    r"best\s+[^:]{0,100}:"
+    r")\b",
+    re.I
+)
+
+LIST_SPLIT_RE = re.compile(r"\s*(?:,|/|;|\||•|·|\u2022|\u00b7|\s+and\s+|\s*&\s*|\s+vs\.?\s+|\s+versus\s+)\s*", re.I)
 
 def _same_sentence_host_names(text: str):
     """
@@ -50,6 +63,42 @@ def _same_sentence_host_names(text: str):
             if near:
                 winners.append(n)
     return winners
+
+
+def expected_entity_kind(award_name: str) -> str:
+    a = award_name.lower()
+    title_hints  = [
+        "screenplay", "original score", "score", "original song", "song",
+        "motion picture", "picture", "film",
+        "television series", "tv series", "series",
+        "mini-series", "miniseries"
+    ]
+    person_hints = ["actor", "actress", "supporting", "performance", "director"]
+    if any(h in a for h in title_hints):
+        return "title"
+    if any(h in a for h in person_hints):
+        return "person"
+    return "title"
+
+
+def extract_title_like_candidates(text: str, nlp_doc=None):
+    # Grab likely movie/series/song titles via quotes
+    cands = set()
+
+    for m in QUOTED_TITLE_RE.finditer(text):
+        cands.add(m.group(1).strip())
+
+    for m in TITLE_CASE_SEQ_RE.finditer(text):
+        cands.add(m.group(1).strip())
+
+    if nlp_doc:
+        for ent in nlp_doc.ents:
+            if ent.label_ in ("WORK_OF_ART", "ORG", "EVENT"):
+                cands.add(ent.text.strip())
+
+    # prune obvious phrases
+    pruned = {t for t in cands if not re.search(r"\b(golden|globe|award|best|category|host|present)\b", t, re.I)}
+    return list(pruned)
 
 
 # Load tweets
@@ -383,6 +432,84 @@ def extract_presenters_from_tweets(data, awards, hosts=None):
     combined_results = {**first_pass, **second_pass}
     return combined_results
 
+def _same_sentence_nominees_for_award(text: str, award_name: str):
+    """
+    Higher recall, still cheap:
+      - sentence must mention THIS award
+      - prefer sentences with nominee cues OR a colon after "Best X"
+      - skip clear winner/presenter/host lines
+      - expand comma/'and' lists; extract people/titles per award type
+    """
+    if not re.search(re.escape(award_name), text, re.I):
+        return []
+
+    kind = expected_entity_kind(award_name)
+    out = []
+
+    for sent in (s.strip() for s in SENT_SPLIT.split(text) if s.strip()):
+        # light skips to avoid single-winner
+        if re.search(r"\b(won|wins|winner|awarded\s+to|goes\s+to)\b", sent, re.I):
+            continue
+        if re.search(r"\b(present|presenter|presenting|introduc|announce)\w*\b", sent, re.I):
+            continue
+        if re.search(r"\b(host|hosts|hosted|hosting)\b", sent, re.I):
+            continue
+
+        listy_hits = len(LIST_SPLIT_RE.split(sent)) - 1
+        if not (NOM_CUE_RE.search(sent) or ":" in sent or listy_hits >= 2):
+            continue
+
+        # If colon/dash present, focus on RHS; else whole sentence
+        parts = re.split(r":|-+\s*", sent, maxsplit=1)
+        segment = parts[1].strip() if len(parts) == 2 and parts[1].strip() else sent
+
+        if kind == "person":
+            for chunk in LIST_SPLIT_RE.split(segment):
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                out.extend(extract_person_names(chunk, context_text=segment))
+        else:
+            items = set()
+            for chunk in LIST_SPLIT_RE.split(segment):
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                items.update(extract_title_like_candidates(chunk))
+            if not items:
+                items.update(extract_title_like_candidates(segment))
+            out.extend(items)
+
+    return out
+
+def extract_nominees_from_tweets(data, awards):
+    # counts per award
+    counts = {a: defaultdict(int) for a in awards}
+
+    for tw in data:
+        text = tw.get('clean_text') or tw.get('text_no_tags') or tw.get('text', '')
+        if not text:
+            continue
+        for award in awards:
+            cands = _same_sentence_nominees_for_award(text, award)
+            for c in set(cands):
+                counts[award][c] += 1
+
+    nominees = {}
+    for award, tally in counts.items():
+        if not tally:
+            nominees[award] = []
+            continue
+        merged = merge_similar_entries(tally)
+        if merged:
+            top_score = max(merged.values())
+            cutoff = max(1, int(0.10 * top_score))
+            ordered = sorted(merged.items(), key=lambda x: (-x[1], x[0]))
+            filtered = [n for n, c in ordered if c >= cutoff]
+            nominees[award] = filtered[:12]
+        else:
+            nominees[award] = []
+    return nominees
 
 def process_tweets(data, ground_truth_awards, ground_truth_nominees=None):
     print("Extracting awards...")
@@ -399,4 +526,7 @@ def process_tweets(data, ground_truth_awards, ground_truth_nominees=None):
     print("Extracting presenters...")
     presenters = extract_presenters_from_tweets(data, ground_truth_awards, hosts)
 
-    return (winners, winner_candidates), hosts, awards, presenters
+    print("Extracting nominees...")
+    nominees = extract_nominees_from_tweets(data, ground_truth_awards)
+
+    return (winners, winner_candidates), hosts, awards, presenters, nominees

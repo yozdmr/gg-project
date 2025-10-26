@@ -4,6 +4,8 @@ nominated_patterns = [
     r'\b(nominate|nominee)\b'
     r'\bup\s+for\b',
     r'\bin\s+the\s+running\s+for\b'
+    r'\b(nominee[s]?[:\-]|nominated\s+for|up\s+for|in\s+the\s+running\s+for|'
+    r'the\s+nominees\s+are|best\s+.*?:)\b',
 ]
 
 award_patterns = {
