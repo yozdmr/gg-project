@@ -341,6 +341,7 @@ def get_presenters(year):
     
     return presenters
 
+PREPROCESSED_FILE = "gg2013_preprocessed.jsonl"
 def pre_ceremony():
     '''Pre-processes and loads data for the Golden Globes analysis.
     
@@ -360,20 +361,20 @@ def pre_ceremony():
     print("Starting pre-ceremony processing...")
     
     # Check if preprocessed file already exists
-    preprocessed_file = 'gg2013_preprocessed.jsonl'
     original_file = 'gg2013.json'
     
-    if os.path.exists(preprocessed_file):
-        print(f"Preprocessed file {preprocessed_file} already exists. Skipping preprocessing.")
+    global PREPROCESSED_FILE
+    if os.path.exists(PREPROCESSED_FILE):
+        print(f"Preprocessed file {PREPROCESSED_FILE} already exists. Skipping preprocessing.")
     else:
         if not os.path.exists(original_file):
             print(f"Error: Original data file {original_file} not found!")
             return
         
-        print(f"Preprocessing {original_file} to create {preprocessed_file}...")
+        print(f"Preprocessing {original_file} to create {PREPROCESSED_FILE}...")
         try:
-            num_tweets = preprocess_file_to_jsonl(original_file, preprocessed_file)
-            print(f"Successfully preprocessed {num_tweets} tweets to {preprocessed_file}")
+            num_tweets = preprocess_file_to_jsonl(original_file, PREPROCESSED_FILE)
+            print(f"Successfully preprocessed {num_tweets} tweets to {PREPROCESSED_FILE}")
         except Exception as e:
             print(f"Error during preprocessing: {e}")
 
@@ -408,11 +409,10 @@ def main():
     pre_ceremony()
 
     # Load the preprocessed data
-    data_file = 'gg2013_preprocessed.jsonl'
-    gg_data = load_data(data_file)
+    gg_data = load_data(PREPROCESSED_FILE)
     
     if not gg_data:
-        print(f"Error: Could not load data from {data_file}")
+        print(f"Error: Could not load data from {PREPROCESSED_FILE}")
         return []
     
     # Process tweets to extract awards, winners, and hosts

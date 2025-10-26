@@ -544,8 +544,8 @@
   },
   "extracted_presenters": {
     "best screenplay - motion picture": [
-      "Robert Pattinson",
-      "Amanda Seyfried"
+      "Amanda Seyfried",
+      "Robert Pattinson"
     ],
     "best director - motion picture": [
       "Ben Affleck",
@@ -574,7 +574,7 @@
     "best motion picture - comedy or musical": [
       "Hugh Jackman",
       "Jennifer Lawrence",
-      "Kristen Wiig"
+      "Will Ferrell"
     ],
     "best performance by an actress in a motion picture - comedy or musical": [
       "Anne Hathaway",
@@ -584,15 +584,15 @@
     "best mini-series or motion picture made for television": [
       "Julianne Moore",
       "Ed Harris",
-      "Kerry Washington"
+      "Dennis Quaid"
     ],
     "best original score - motion picture": [
       "Jason Statham",
       "Mychael Danna"
     ],
     "best performance by an actress in a television series - drama": [
-      "Lea Michele",
-      "Nathan Fillion"
+      "Nathan Fillion",
+      "Lea Michele"
     ],
     "best performance by an actress in a motion picture - drama": [
       "Bill Clinton",
@@ -626,8 +626,8 @@
     ],
     "best television series - drama": [
       "Paul Rudd",
-      "Lea Michele",
-      "Nathan Fillion"
+      "Nathan Fillion",
+      "Lea Michele"
     ],
     "best performance by an actor in a mini-series or motion picture made for television": [
       "Christoph Waltz",
@@ -654,8 +654,8 @@
       "Drama"
     ],
     "best television series - comedy or musical": [
-      "Jimmy Fallon",
-      "Jay Leno"
+      "Jay Leno",
+      "Jimmy Fallon"
     ],
     "best performance by an actor in a television series - drama": [
       "Daniel Day-Lewis",
@@ -665,7 +665,7 @@
     "best performance by an actor in a television series - comedy or musical": [
       "Hugh Jackman",
       "Jennifer Lawrence",
-      "Kristen Wiig"
+      "Will Ferrell"
     ]
   }
 }
