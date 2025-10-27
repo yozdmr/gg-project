@@ -81,7 +81,7 @@ def expected_entity_kind(award_name: str) -> str:
     return "title"
 
 
-def extract_title_like_candidates(text: str, nlp_doc=None):
+def extract_titles(text: str, nlp_doc=None):
     # Grab likely movie/series/song titles via quotes
     cands = set()
 
@@ -409,13 +409,16 @@ def extract_presenters_from_tweets(data, awards, hosts=None):
     combined_results = {**first_pass, **second_pass}
     return combined_results
 
-def _same_sentence_nominees_for_award(text: str, award_name: str):
+def same_sentence_nominees_for_award(text: str, award_name: str):
     """
-    Higher recall, still cheap:
-      - sentence must mention THIS award
-      - prefer sentences with nominee cues OR a colon after "Best X"
-      - skip clear winner/presenter/host lines
-      - expand comma/'and' lists; extract people/titles per award type
+    1. Check if the text mentions the given award name; skip if not
+    2. Determine whether to extract people or titles based on the award type
+    3. Split the text into sentences
+    4. Skip sentences that talk about winners, presenters, or hosts
+    5. Keep only sentences that look nominee-related (nominee cues, colon, or list format)
+    6. If a colon or dash is present, focus on the right-hand side (likely nominee list)
+    7. Extract nominee names or titles depending on the award type
+    8. Return all extracted nominee candidates for the awardsd
     """
     if not re.search(re.escape(award_name), text, re.I):
         return []
@@ -452,14 +455,24 @@ def _same_sentence_nominees_for_award(text: str, award_name: str):
                 chunk = chunk.strip()
                 if not chunk:
                     continue
-                items.update(extract_title_like_candidates(chunk))
+                items.update(extract_titles(chunk))
             if not items:
-                items.update(extract_title_like_candidates(segment))
+                items.update(extract_titles(segment))
             out.extend(items)
 
     return out
 
 def extract_nominees_from_tweets(data, awards):
+    """
+    1. Initialize a counter for each award to track nominee mentions
+    2. Iterate through all tweets and extract clean text
+    3. Skip tweets without usable text content
+    4. For each award, find all nominee candidates using same_sentence_nominees_for_award()
+    5. Increment the count for each unique nominee mention per award
+    6. Merge similar nominee names to unify duplicates
+    7. Determine a cutoff threshold based on the top nominee frequency
+    8. Sort nominees by frequency, filter by the cutoff, cap list size, and return final nominees
+    """
     # counts per award
     counts = {a: defaultdict(int) for a in awards}
 
@@ -468,7 +481,7 @@ def extract_nominees_from_tweets(data, awards):
         if not text:
             continue
         for award in awards:
-            cands = _same_sentence_nominees_for_award(text, award)
+            cands = same_sentence_nominees_for_award(text, award)
             for c in set(cands):
                 counts[award][c] += 1
 
